@@ -6,7 +6,7 @@ Instead of collecting money through opaque chat threads and manually tracking wh
 
 ## Stellar Expert Link
 
-https://stellar.expert/explorer/testnet/contract/CAYVCPVE7APQDB6DFZYXWA575P2UVMICMRAHYJMPJB5XAY4MCNBU6LIB
+https://stellar.expert/explorer/testnet/contract/CCA7C47RNAE4W24FGZUNSK7EJKCZ5OKHSO3AYHMHQ4D6PC542DFKOXUL
 
 
 ## Smart Contract Address
