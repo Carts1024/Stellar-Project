@@ -1,6 +1,6 @@
 # Talambag
 
-Talambag is a Soroban-powered community pooling application built on Stellar. It helps real-world groups, families, organizations, and OFW communities manage shared contributions with better transparency than screenshot-based payment coordination.
+Talambag, A portmanteau of Tala (Star/Stellar) and Ambag (Contribution). It literally means "Stellar Contribution". Is a Soroban-powered community pooling application built on Stellar. It helps real-world groups, families, organizations, and OFW communities manage shared contributions with better transparency than screenshot-based payment coordination.
 
 Instead of collecting money through opaque chat threads and manually tracking who paid, Talambag records group membership, pool creation, contributions, and organizer withdrawals on-chain.
 
