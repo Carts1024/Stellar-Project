@@ -1,4 +1,4 @@
-export type ContractStatus = "loading" | "uninitialized" | "ready" | "error";
+export type ContractStatus = "idle" | "loading" | "ready" | "error";
 export type WalletStatus = "disconnected" | "connecting" | "connected" | "unsupported";
 export type TxState = "idle" | "signing" | "submitting" | "success" | "error";
 
@@ -9,11 +9,30 @@ export type TxFeedback = {
   hash?: string;
 };
 
+export type GroupSummary = {
+  id: number;
+  name: string;
+  owner: string;
+  assetAddress: string;
+  memberCount: number;
+  nextPoolId: number;
+};
+
+export type PoolSummary = {
+  id: number;
+  groupId: number;
+  name: string;
+  organizer: string;
+  balance: bigint;
+};
+
 export type ContractSnapshot = {
   status: ContractStatus;
-  organizer: string | null;
-  assetAddress: string | null;
-  poolBalance: bigint | null;
+  selectedGroupId: number | null;
+  selectedPoolId: number | null;
+  group: GroupSummary | null;
+  pool: PoolSummary | null;
+  isWalletMember: boolean | null;
   error?: string;
 };
 

@@ -45,6 +45,10 @@ export function useFreighterWallet() {
     return snapshot;
   }
 
+  function disconnectWallet() {
+    setWallet(initialWalletState);
+  }
+
   useEffect(() => {
     void refreshWallet();
   }, []);
@@ -52,6 +56,7 @@ export function useFreighterWallet() {
   return {
     wallet,
     connectWallet,
+    disconnectWallet,
     refreshWallet,
   };
 }

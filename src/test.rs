@@ -2,26 +2,37 @@
 
 extern crate std;
 
-use super::{Error, TalambagContract, TalambagContractClient};
-use soroban_sdk::{testutils::Address as _, token, Address, Env};
+use super::{Error, Group, Pool, TalambagContract, TalambagContractClient};
+use soroban_sdk::{testutils::Address as _, token, Address, Env, String};
 
 mod tests {
     use super::*;
     use std::boxed::Box;
 
-    fn setup() -> (
-        Env,
-        TalambagContractClient<'static>,
-        token::Client<'static>,
-        Address,
-        Address,
-        Address,
-    ) {
+    struct TestContext {
+        env: Env,
+        client: TalambagContractClient<'static>,
+        token_client: token::Client<'static>,
+        group_owner: Address,
+        pool_creator: Address,
+        contributor: Address,
+        outsider: Address,
+        recipient: Address,
+        asset_address: Address,
+    }
+
+    fn text(env: &Env, value: &str) -> String {
+        String::from_str(env, value)
+    }
+
+    fn setup() -> TestContext {
         let env = Env::default();
         env.mock_all_auths();
 
-        let organizer = Address::generate(&env);
+        let group_owner = Address::generate(&env);
+        let pool_creator = Address::generate(&env);
         let contributor = Address::generate(&env);
+        let outsider = Address::generate(&env);
         let recipient = Address::generate(&env);
 
         let asset_admin = Address::generate(&env);
@@ -29,56 +40,124 @@ mod tests {
         let asset_address = asset.address();
 
         let token_admin = token::StellarAssetClient::new(&env, &asset_address);
-        let _token_client = token::Client::new(&env, &asset_address);
+        token_admin.mint(&pool_creator, &1_000);
         token_admin.mint(&contributor, &1_000);
+        token_admin.mint(&outsider, &1_000);
 
         let contract_id = env.register(TalambagContract, ());
-        let client = TalambagContractClient::new(&env, &contract_id);
-        client.init(&organizer, &asset_address);
-
-        // Extend lifetimes for the generated clients inside the test helper.
         let env_ref: &'static Env = Box::leak(Box::new(env));
-        let client = TalambagContractClient::new(env_ref, &contract_id);
-        let token_client = token::Client::new(env_ref, &asset_address);
 
-        (
-            env_ref.clone(),
-            client,
-            token_client,
-            organizer,
+        TestContext {
+            env: env_ref.clone(),
+            client: TalambagContractClient::new(env_ref, &contract_id),
+            token_client: token::Client::new(env_ref, &asset_address),
+            group_owner,
+            pool_creator,
             contributor,
+            outsider,
             recipient,
+            asset_address,
+        }
+    }
+
+    fn create_group_with_members(context: &TestContext) -> u32 {
+        let group_id = context.client.create_group(
+            &context.group_owner,
+            &text(&context.env, "Barangay Support"),
+            &context.asset_address,
+        );
+
+        context
+            .client
+            .add_member(&context.group_owner, &group_id, &context.pool_creator);
+        context
+            .client
+            .add_member(&context.group_owner, &group_id, &context.contributor);
+
+        group_id
+    }
+
+    fn create_pool(context: &TestContext, group_id: u32) -> u32 {
+        context.client.create_pool(
+            &context.pool_creator,
+            &group_id,
+            &text(&context.env, "Emergency Relief Pool"),
         )
     }
 
     #[test]
-    fn happy_path_deposit_and_organizer_withdrawal_succeeds() {
-        let (_env, client, token_client, organizer, contributor, recipient) = setup();
+    fn group_members_can_fund_a_pool_and_the_pool_organizer_can_withdraw() {
+        let context = setup();
+        let group_id = create_group_with_members(&context);
+        let pool_id = create_pool(&context, group_id);
 
-        client.deposit(&contributor, &250);
-        client.withdraw(&organizer, &recipient, &100);
+        context
+            .client
+            .deposit(&context.contributor, &group_id, &pool_id, &250);
+        context.client.withdraw(
+            &context.pool_creator,
+            &group_id,
+            &pool_id,
+            &context.recipient,
+            &100,
+        );
 
-        assert_eq!(client.pool_balance(), 150);
-        assert_eq!(token_client.balance(&recipient), 100);
+        assert_eq!(context.client.pool_balance(&group_id, &pool_id), 150);
+        assert_eq!(context.token_client.balance(&context.recipient), 100);
     }
 
     #[test]
-    fn edge_case_non_organizer_withdrawal_is_rejected() {
-        let (_env, client, _token_client, _organizer, contributor, recipient) = setup();
+    fn non_group_members_cannot_contribute_to_a_pool() {
+        let context = setup();
+        let group_id = create_group_with_members(&context);
+        let pool_id = create_pool(&context, group_id);
 
-        client.deposit(&contributor, &200);
+        let result = context
+            .client
+            .try_deposit(&context.outsider, &group_id, &pool_id, &25);
 
-        let result = client.try_withdraw(&contributor, &recipient, &50);
+        assert_eq!(result, Err(Ok(Error::NotGroupMember)));
+    }
+
+    #[test]
+    fn only_the_pool_organizer_can_withdraw() {
+        let context = setup();
+        let group_id = create_group_with_members(&context);
+        let pool_id = create_pool(&context, group_id);
+
+        context
+            .client
+            .deposit(&context.contributor, &group_id, &pool_id, &180);
+
+        let result = context.client.try_withdraw(
+            &context.group_owner,
+            &group_id,
+            &pool_id,
+            &context.recipient,
+            &50,
+        );
+
         assert_eq!(result, Err(Ok(Error::Unauthorized)));
     }
 
     #[test]
-    fn state_verification_storage_reflects_organizer_and_balance() {
-        let (_env, client, _token_client, organizer, contributor, _recipient) = setup();
+    fn group_and_pool_reads_reflect_owner_membership_and_balance() {
+        let context = setup();
+        let group_id = create_group_with_members(&context);
+        let pool_id = create_pool(&context, group_id);
 
-        client.deposit(&contributor, &300);
+        context
+            .client
+            .deposit(&context.contributor, &group_id, &pool_id, &300);
 
-        assert_eq!(client.organizer(), organizer);
-        assert_eq!(client.pool_balance(), 300);
+        let group: Group = context.client.group(&group_id);
+        let pool: Pool = context.client.pool(&group_id, &pool_id);
+
+        assert_eq!(group.owner, context.group_owner);
+        assert_eq!(group.member_count, 3);
+        assert_eq!(group.asset, context.asset_address);
+        assert!(context.client.is_member(&group_id, &context.contributor));
+        assert_eq!(pool.organizer, context.pool_creator);
+        assert_eq!(pool.balance, 300);
     }
 }

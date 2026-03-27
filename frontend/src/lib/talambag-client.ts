@@ -11,30 +11,17 @@ import {
 } from "@stellar/stellar-sdk";
 import { appConfig, getExpectedNetworkPassphrase, hasRequiredConfig } from "@/lib/config";
 import { signWithFreighter } from "@/lib/freighter";
-import type { ContractSnapshot } from "@/lib/types";
+import type { ContractSnapshot, GroupSummary, PoolSummary } from "@/lib/types";
+
+type ContractArg = {
+  value: string | bigint | number;
+  type: "address" | "i128" | "u32" | "string";
+};
 
 function getServer() {
   return new rpc.Server(appConfig.rpcUrl, {
     allowHttp: appConfig.rpcUrl.startsWith("http://"),
   });
-}
-
-function normalizeError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-
-  if (message.includes("#2") || /NotInitialized/i.test(message)) {
-    return "The pool has not been initialized yet.";
-  }
-
-  if (message.includes("#3") || /Unauthorized/i.test(message)) {
-    return "Only the verified organizer can perform this action.";
-  }
-
-  if (message.includes("#4") || /AmountMustBePositive/i.test(message)) {
-    return "Amount must be greater than zero.";
-  }
-
-  return message;
 }
 
 function ensureConfigured() {
@@ -43,7 +30,45 @@ function ensureConfigured() {
   }
 }
 
-function buildArgs(values: Array<{ value: string | bigint; type: "address" | "i128" }>) {
+function normalizeError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+
+  if (message.includes("#1") || /Unauthorized/i.test(message)) {
+    return "Only the allowed wallet can perform this action.";
+  }
+
+  if (message.includes("#2") || /AmountMustBePositive/i.test(message)) {
+    return "Amount must be greater than zero.";
+  }
+
+  if (message.includes("#3") || /GroupNotFound/i.test(message)) {
+    return "The selected group does not exist on-chain.";
+  }
+
+  if (message.includes("#4") || /PoolNotFound/i.test(message)) {
+    return "The selected pool does not exist for this group.";
+  }
+
+  if (message.includes("#5") || /AlreadyGroupMember/i.test(message)) {
+    return "That wallet is already a member of the selected group.";
+  }
+
+  if (message.includes("#6") || /NotGroupMember/i.test(message)) {
+    return "Only group members can perform this action.";
+  }
+
+  if (message.includes("#7") || /InsufficientPoolBalance/i.test(message)) {
+    return "This pool does not have enough balance for that withdrawal.";
+  }
+
+  if (message.includes("#8") || /NameRequired/i.test(message)) {
+    return "Name is required.";
+  }
+
+  return message;
+}
+
+function buildArgs(values: ContractArg[]) {
   return values.map((entry) => nativeToScVal(entry.value, { type: entry.type }));
 }
 
@@ -88,10 +113,11 @@ async function simulateRead<T>(
   return transform(scValToNative(simulation.result.retval));
 }
 
-async function signAndSubmit(
+async function signAndSubmit<T>(
   sourceAddress: string,
   method: string,
   args: ReturnType<typeof buildArgs>,
+  transformReturn?: (value: unknown) => T,
 ) {
   ensureConfigured();
   const server = getServer();
@@ -123,7 +149,36 @@ async function signAndSubmit(
 
   return {
     hash: sendResponse.hash,
+    result:
+      transformReturn && finalResponse.returnValue
+        ? transformReturn(scValToNative(finalResponse.returnValue))
+        : undefined,
   };
+}
+
+function readRecordValue(record: unknown, keys: string[]) {
+  if (!record || typeof record !== "object") {
+    return undefined;
+  }
+
+  if (record instanceof Map) {
+    for (const key of keys) {
+      if (record.has(key)) {
+        return record.get(key);
+      }
+    }
+
+    return undefined;
+  }
+
+  const objectRecord = record as Record<string, unknown>;
+  for (const key of keys) {
+    if (key in objectRecord) {
+      return objectRecord[key];
+    }
+  }
+
+  return undefined;
 }
 
 function normalizeAddress(value: unknown) {
@@ -139,7 +194,7 @@ function normalizeAddress(value: unknown) {
     return value.toString();
   }
 
-  return null;
+  throw new Error("Unable to parse Stellar address returned by the contract.");
 }
 
 function normalizeBigInt(value: unknown) {
@@ -155,78 +210,219 @@ function normalizeBigInt(value: unknown) {
     return BigInt(value);
   }
 
-  return 0n;
+  throw new Error("Unable to parse integer value returned by the contract.");
 }
 
-export async function getContractSnapshot(): Promise<ContractSnapshot> {
+function normalizeNumber(value: unknown) {
+  const normalized = Number(normalizeBigInt(value));
+
+  if (!Number.isSafeInteger(normalized)) {
+    throw new Error("The contract returned an ID or count outside the supported range.");
+  }
+
+  return normalized;
+}
+
+function normalizeString(value: unknown) {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (value && typeof value === "object" && "toString" in value) {
+    return value.toString();
+  }
+
+  throw new Error("Unable to parse string value returned by the contract.");
+}
+
+function normalizeBoolean(value: unknown) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  throw new Error("Unable to parse boolean value returned by the contract.");
+}
+
+function normalizeGroup(value: unknown): GroupSummary {
+  return {
+    id: normalizeNumber(readRecordValue(value, ["id"])),
+    name: normalizeString(readRecordValue(value, ["name"])),
+    owner: normalizeAddress(readRecordValue(value, ["owner"])),
+    assetAddress: normalizeAddress(readRecordValue(value, ["asset", "assetAddress"])),
+    memberCount: normalizeNumber(readRecordValue(value, ["member_count", "memberCount"])),
+    nextPoolId: normalizeNumber(readRecordValue(value, ["next_pool_id", "nextPoolId"])),
+  };
+}
+
+function normalizePool(value: unknown): PoolSummary {
+  return {
+    id: normalizeNumber(readRecordValue(value, ["id"])),
+    groupId: normalizeNumber(readRecordValue(value, ["group_id", "groupId"])),
+    name: normalizeString(readRecordValue(value, ["name"])),
+    organizer: normalizeAddress(readRecordValue(value, ["organizer"])),
+    balance: normalizeBigInt(readRecordValue(value, ["balance"])),
+  };
+}
+
+function getReadAddress() {
+  if (!appConfig.readAddress) {
+    throw new Error(
+      "Set NEXT_PUBLIC_STELLAR_READ_ADDRESS to a funded testnet account so the app can simulate public contract reads.",
+    );
+  }
+
+  return appConfig.readAddress;
+}
+
+async function readGroup(groupId: number) {
+  return simulateRead(getReadAddress(), "group", buildArgs([{ value: groupId, type: "u32" }]), normalizeGroup);
+}
+
+async function readPool(groupId: number, poolId: number) {
+  return simulateRead(
+    getReadAddress(),
+    "pool",
+    buildArgs([
+      { value: groupId, type: "u32" },
+      { value: poolId, type: "u32" },
+    ]),
+    normalizePool,
+  );
+}
+
+async function readMembership(groupId: number, walletAddress: string) {
+  return simulateRead(
+    getReadAddress(),
+    "is_member",
+    buildArgs([
+      { value: groupId, type: "u32" },
+      { value: walletAddress, type: "address" },
+    ]),
+    normalizeBoolean,
+  );
+}
+
+export async function getContractSnapshot(
+  groupId: number | null,
+  poolId: number | null,
+  walletAddress: string | null,
+): Promise<ContractSnapshot> {
   ensureConfigured();
 
-  if (!appConfig.readAddress) {
+  if (groupId === null) {
     return {
-      status: "error",
-      organizer: null,
-      assetAddress: appConfig.assetAddress || null,
-      poolBalance: null,
-      error:
-        "Set NEXT_PUBLIC_STELLAR_READ_ADDRESS to a funded testnet account so the app can simulate public contract reads.",
+      status: "idle",
+      selectedGroupId: null,
+      selectedPoolId: null,
+      group: null,
+      pool: null,
+      isWalletMember: walletAddress ? false : null,
     };
   }
 
   try {
-    const organizer = await simulateRead(appConfig.readAddress, "organizer", [], normalizeAddress);
-    const poolBalance = await simulateRead(
-      appConfig.readAddress,
-      "pool_balance",
-      [],
-      normalizeBigInt,
-    );
+    const group = await readGroup(groupId);
+    const isWalletMember = walletAddress ? await readMembership(groupId, walletAddress) : null;
+    const pool = poolId === null ? null : await readPool(groupId, poolId);
 
     return {
       status: "ready",
-      organizer,
-      assetAddress: appConfig.assetAddress || null,
-      poolBalance,
+      selectedGroupId: groupId,
+      selectedPoolId: poolId,
+      group,
+      pool,
+      isWalletMember,
     };
   } catch (error) {
-    const message = normalizeError(error);
-
-    if (message === "The pool has not been initialized yet.") {
-      return {
-        status: "uninitialized",
-        organizer: null,
-        assetAddress: appConfig.assetAddress || null,
-        poolBalance: null,
-      };
-    }
-
     return {
       status: "error",
-      organizer: null,
-      assetAddress: appConfig.assetAddress || null,
-      poolBalance: null,
-      error: message,
+      selectedGroupId: groupId,
+      selectedPoolId: poolId,
+      group: null,
+      pool: null,
+      isWalletMember: walletAddress ? false : null,
+      error: normalizeError(error),
     };
   }
 }
 
-export async function initializePool(organizer: string, assetAddress: string) {
-  return signAndSubmit(organizer, "init", buildArgs([
-    { value: organizer, type: "address" },
-    { value: assetAddress, type: "address" },
-  ]));
+export async function createGroup(owner: string, name: string, assetAddress: string) {
+  const response = await signAndSubmit(
+    owner,
+    "create_group",
+    buildArgs([
+      { value: owner, type: "address" },
+      { value: name, type: "string" },
+      { value: assetAddress, type: "address" },
+    ]),
+    normalizeNumber,
+  );
+
+  return {
+    hash: response.hash,
+    groupId: response.result ?? null,
+  };
 }
 
-export async function depositToPool(from: string, amount: bigint) {
-  return signAndSubmit(from, "deposit", buildArgs([
-    { value: from, type: "address" },
-    { value: amount, type: "i128" },
-  ]));
+export async function addGroupMember(owner: string, groupId: number, member: string) {
+  return signAndSubmit(
+    owner,
+    "add_member",
+    buildArgs([
+      { value: owner, type: "address" },
+      { value: groupId, type: "u32" },
+      { value: member, type: "address" },
+    ]),
+  );
 }
 
-export async function withdrawFromPool(organizer: string, to: string, amount: bigint) {
-  return signAndSubmit(organizer, "withdraw", buildArgs([
-    { value: organizer, type: "address" },
-    { value: to, type: "address" },
-    { value: amount, type: "i128" },
-  ]));
+export async function createPool(creator: string, groupId: number, name: string) {
+  const response = await signAndSubmit(
+    creator,
+    "create_pool",
+    buildArgs([
+      { value: creator, type: "address" },
+      { value: groupId, type: "u32" },
+      { value: name, type: "string" },
+    ]),
+    normalizeNumber,
+  );
+
+  return {
+    hash: response.hash,
+    poolId: response.result ?? null,
+  };
+}
+
+export async function depositToPool(from: string, groupId: number, poolId: number, amount: bigint) {
+  return signAndSubmit(
+    from,
+    "deposit",
+    buildArgs([
+      { value: from, type: "address" },
+      { value: groupId, type: "u32" },
+      { value: poolId, type: "u32" },
+      { value: amount, type: "i128" },
+    ]),
+  );
+}
+
+export async function withdrawFromPool(
+  organizer: string,
+  groupId: number,
+  poolId: number,
+  to: string,
+  amount: bigint,
+) {
+  return signAndSubmit(
+    organizer,
+    "withdraw",
+    buildArgs([
+      { value: organizer, type: "address" },
+      { value: groupId, type: "u32" },
+      { value: poolId, type: "u32" },
+      { value: to, type: "address" },
+      { value: amount, type: "i128" },
+    ]),
+  );
 }

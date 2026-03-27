@@ -8,7 +8,7 @@ Community organizers and OFW groups lose track of pooled contributions for gifts
 
 ## Solution
 
-Talambag uses a Soroban smart contract to create a transparent, immutable pool where anyone can deposit XLM and only the verified organizer can withdraw, visible to all contributors on-chain.
+Talambag uses a Soroban smart contract to create transparent groups on Stellar. Each group has an owner, approved members, and multiple pools. Any group member can create a pool, the creator of that pool becomes its organizer, only group members can contribute to that pool, and only that pool organizer can withdraw from it.
 
 ## Suggested Timeline for MVP Delivery
 
@@ -97,21 +97,48 @@ soroban contract deploy \
 
 ## Sample CLI Invocation
 
-This MVP uses `init`, `deposit`, `withdraw`, and `pool_balance` rather than certificate registration because the Talambag problem statement is a shared contribution pool.
+This version uses `create_group`, `add_member`, `create_pool`, `deposit`, `withdraw`, `group`, `pool`, and `is_member`.
 
-Initialize the organizer and asset:
+Create a group:
 
 ```bash
 soroban contract invoke \
   --id <CONTRACT_ID> \
-  --source organizer \
+  --source group_owner \
   --network testnet \
-  -- init \
-  --organizer <ORGANIZER_ADDRESS> \
+  -- create_group \
+  --owner <GROUP_OWNER_ADDRESS> \
+  --name "Community Aid" \
   --asset <TOKEN_CONTRACT_ADDRESS>
 ```
 
-Deposit into the pool:
+Add a member to a group:
+
+```bash
+soroban contract invoke \
+  --id <CONTRACT_ID> \
+  --source group_owner \
+  --network testnet \
+  -- add_member \
+  --owner <GROUP_OWNER_ADDRESS> \
+  --group_id 1 \
+  --member <MEMBER_ADDRESS>
+```
+
+Create a pool inside a group:
+
+```bash
+soroban contract invoke \
+  --id <CONTRACT_ID> \
+  --source member \
+  --network testnet \
+  -- create_pool \
+  --creator <MEMBER_ADDRESS> \
+  --group_id 1 \
+  --name "Emergency Support"
+```
+
+Deposit into a group pool:
 
 ```bash
 soroban contract invoke \
@@ -120,19 +147,35 @@ soroban contract invoke \
   --network testnet \
   -- deposit \
   --from <CONTRIBUTOR_ADDRESS> \
+  --group_id 1 \
+  --pool_id 1 \
   --amount 10000000
 ```
 
-Read the pool balance:
+Read group and pool details:
 
 ```bash
 soroban contract invoke \
   --id <CONTRACT_ID> \
   --source anyone \
   --network testnet \
-  -- pool_balance
+  -- group \
+  --group_id 1
+```
+
+```bash
+soroban contract invoke \
+  --id <CONTRACT_ID> \
+  --source anyone \
+  --network testnet \
+  -- pool \
+  --group_id 1 \
+  --pool_id 1
 ```
 
 ## MIT License
 
 This project is provided under the MIT License.
+
+
+CCA7C47RNAE4W24FGZUNSK7EJKCZ5OKHSO3AYHMHQ4D6PC542DFKOXUL
