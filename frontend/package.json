@@ -2,6 +2,23 @@
   "name": "talambag-frontend",
   "private": true,
   "version": "0.1.0",
+  "packageManager": "pnpm@10.0.0",
+  "dependencies": {
+    "@stellar/freighter-api": "^5.0.0",
+    "@stellar/stellar-sdk": "^13.3.0",
+    "next": "^15.5.2",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.1",
+    "@types/node": "^22.17.1",
+    "@types/react": "^19.1.9",
+    "@types/react-dom": "^19.1.7",
+    "eslint": "^9.34.0",
+    "eslint-config-next": "^15.5.2",
+    "typescript": "^5.9.2"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",

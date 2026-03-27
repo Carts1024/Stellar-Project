@@ -276,6 +276,15 @@ a {
   border-color: rgba(15, 118, 110, 0.42);
 }
 
+.field-hint {
+  margin: -4px 0 0;
+  font-size: 0.92rem;
+}
+
+.error-text {
+  color: var(--rose);
+}
+
 .inline-link {
   appearance: none;
   background: none;

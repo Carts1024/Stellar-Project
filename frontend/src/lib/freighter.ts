@@ -29,7 +29,13 @@ export async function readFreighterWallet(): Promise<WalletSnapshot> {
   }
 
   if (!connection.isConnected) {
-    return buildUnsupportedWallet("Install the Freighter browser extension to connect.");
+    return {
+      status: "disconnected",
+      address: null,
+      network: null,
+      networkPassphrase: null,
+      isExpectedNetwork: false,
+    };
   }
 
   const [addressResponse, networkResponse] = await Promise.all([
@@ -86,7 +92,6 @@ export async function connectFreighterWallet() {
 
 export async function signWithFreighter(transactionXdr: string, address: string) {
   const result = await signTransaction(transactionXdr, {
-    network: appConfig.network,
     networkPassphrase: getExpectedNetworkPassphrase(),
     address,
   });

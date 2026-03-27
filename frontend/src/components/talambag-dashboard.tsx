@@ -5,6 +5,7 @@ import { appConfig } from "@/lib/config";
 import { formatAmount, parseAmountToInt, shortenAddress } from "@/lib/format";
 import { getContractSnapshot, depositToPool, initializePool, withdrawFromPool } from "@/lib/talambag-client";
 import type { ContractSnapshot, TxFeedback } from "@/lib/types";
+import { isValidStellarAddress } from "@/lib/validators";
 import { useFreighterWallet } from "@/hooks/use-freighter-wallet";
 
 const initialContractState: ContractSnapshot = {
@@ -53,12 +54,17 @@ export function TalambagDashboard() {
     wallet.address !== null &&
     contract.organizer !== null &&
     wallet.address === contract.organizer;
+  const organizerAddress = contract.organizer;
 
   const actionsBlocked =
     isSubmitting ||
     wallet.status !== "connected" ||
     !wallet.address ||
     !wallet.isExpectedNetwork;
+  const isValidAssetAddress = assetAddress.trim() ? isValidStellarAddress(assetAddress) : false;
+  const isValidRecipientAddress = withdrawRecipient.trim()
+    ? isValidStellarAddress(withdrawRecipient)
+    : false;
 
   function explorerLink(hash?: string) {
     if (!hash) {
@@ -106,6 +112,15 @@ export function TalambagDashboard() {
       return;
     }
 
+    if (!isValidAssetAddress) {
+      setTxFeedback({
+        state: "error",
+        title: "Invalid asset contract address",
+        detail: "Enter a valid Stellar contract address before initializing the pool.",
+      });
+      return;
+    }
+
     setIsSubmitting(true);
     setTxFeedback({
       state: "signing",
@@ -137,6 +152,15 @@ export function TalambagDashboard() {
     event.preventDefault();
 
     if (!wallet.address) {
+      return;
+    }
+
+    if (!isValidRecipientAddress) {
+      setTxFeedback({
+        state: "error",
+        title: "Invalid recipient address",
+        detail: "Withdrawal requires a valid Stellar address.",
+      });
       return;
     }
 
@@ -259,7 +283,7 @@ export function TalambagDashboard() {
           <strong className="metric-value address">{shortenAddress(contract.organizer)}</strong>
           <span className="metric-detail">
             {contract.organizer ? (
-              <button className="inline-link" onClick={() => void copyText(contract.organizer)}>
+              <button className="inline-link" onClick={() => organizerAddress && void copyText(organizerAddress)}>
                 Copy organizer address
               </button>
             ) : (
@@ -349,6 +373,9 @@ export function TalambagDashboard() {
               <button className="primary-button" type="submit" disabled={actionsBlocked || !assetAddress.trim()}>
                 {isSubmitting ? "Preparing..." : "Initialize pool"}
               </button>
+              {assetAddress.trim() && !isValidAssetAddress ? (
+                <p className="field-hint error-text">Enter a valid Stellar contract address.</p>
+              ) : null}
             </form>
           </article>
         ) : null}
@@ -420,7 +447,8 @@ export function TalambagDashboard() {
                 !isOrganizer ||
                 contract.status !== "ready" ||
                 !withdrawAmount.trim() ||
-                !withdrawRecipient.trim()
+                !withdrawRecipient.trim() ||
+                !isValidRecipientAddress
               }
             >
               {isOrganizer
@@ -429,6 +457,9 @@ export function TalambagDashboard() {
                   : "Withdraw from pool"
                 : "Organizer wallet required"}
             </button>
+            {withdrawRecipient.trim() && !isValidRecipientAddress ? (
+              <p className="field-hint error-text">Recipient must be a valid Stellar address.</p>
+            ) : null}
           </form>
         </article>
       </section>

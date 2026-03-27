@@ -48,6 +48,44 @@ soroban contract build
 cargo test
 ```
 
+## Frontend Setup
+
+The repo now includes a Next.js frontend in [`frontend/`](/home/carts/Documents/Personal/Stellar-Project/frontend) that connects to the Soroban contract with Freighter.
+
+Install dependencies with `pnpm`:
+
+```bash
+cd frontend
+pnpm install
+```
+
+Create a local environment file from the example and fill in your deployed values:
+
+```bash
+cp .env.example .env.local
+```
+
+Required frontend environment variables:
+
+- `NEXT_PUBLIC_TALAMBAG_CONTRACT_ID`
+- `NEXT_PUBLIC_TALAMBAG_ASSET_ADDRESS`
+- `NEXT_PUBLIC_STELLAR_READ_ADDRESS`
+
+Useful defaults are already included in `.env.example` for Stellar testnet.
+
+Run the frontend locally:
+
+```bash
+pnpm dev
+```
+
+Validate the frontend:
+
+```bash
+pnpm lint
+pnpm build
+```
+
 ## Testnet Deploy
 
 ```bash

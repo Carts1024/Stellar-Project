@@ -77,11 +77,15 @@ async function simulateRead<T>(
   const transaction = await buildTransaction(sourceAddress, method, args);
   const simulation = await server.simulateTransaction(transaction);
 
-  if (simulation.error) {
+  if (rpc.Api.isSimulationError(simulation)) {
     throw new Error(normalizeError(simulation.error));
   }
 
-  return transform(scValToNative(simulation.result?.retval));
+  if (!simulation.result?.retval) {
+    throw new Error(`Simulation for ${method} returned no value.`);
+  }
+
+  return transform(scValToNative(simulation.result.retval));
 }
 
 async function signAndSubmit(
@@ -101,7 +105,7 @@ async function signAndSubmit(
   const sendResponse = await server.sendTransaction(signedTransaction);
 
   if (sendResponse.status !== "PENDING") {
-    throw new Error(normalizeError(sendResponse.errorResultXdr ?? sendResponse.status));
+    throw new Error(normalizeError(sendResponse.errorResult ?? sendResponse.status));
   }
 
   const finalResponse = await server.pollTransaction(sendResponse.hash, {
@@ -109,8 +113,12 @@ async function signAndSubmit(
     sleepStrategy: () => 1200,
   });
 
-  if (finalResponse.status !== rpc.Api.GetTransactionStatus.SUCCESS) {
-    throw new Error(normalizeError(finalResponse.resultXdr ?? finalResponse.status));
+  if (finalResponse.status === rpc.Api.GetTransactionStatus.NOT_FOUND) {
+    throw new Error("Transaction was submitted but could not be found on the RPC server.");
+  }
+
+  if (finalResponse.status === rpc.Api.GetTransactionStatus.FAILED) {
+    throw new Error(normalizeError(finalResponse.resultXdr));
   }
 
   return {
