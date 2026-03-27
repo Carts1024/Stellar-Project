@@ -4,6 +4,18 @@ Talambag, A portmanteau of Tala (Star/Stellar) and Ambag (Contribution). It lite
 
 Instead of collecting money through opaque chat threads and manually tracking who paid, Talambag records group membership, pool creation, contributions, and organizer withdrawals on-chain.
 
+## Stellar Expert Link
+
+https://stellar.expert/explorer/testnet/contract/CAYVCPVE7APQDB6DFZYXWA575P2UVMICMRAHYJMPJB5XAY4MCNBU6LIB
+
+
+## Smart Contract Address
+
+CCA7C47RNAE4W24FGZUNSK7EJKCZ5OKHSO3AYHMHQ4D6PC542DFKOXUL
+
+This Soroban smart contract manages community groups and their contribution pools on-chain. It enforces membership and role-based permissions so only authorized users can add members, create pools, contribute, or withdraw funds. It also tracks each pool balance independently to keep funds and accounting transparent across multiple groups.
+
+
 ## What The Project Solves
 
 Small communities often raise money for:
@@ -423,8 +435,5 @@ Possible next steps:
 - improve explorer deep links and transaction receipts
 - add end-to-end browser tests
 
-## Smart Contract Address
-
-CCA7C47RNAE4W24FGZUNSK7EJKCZ5OKHSO3AYHMHQ4D6PC542DFKOXUL
 
 
