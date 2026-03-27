@@ -13,6 +13,8 @@ https://stellar.expert/explorer/testnet/contract/CAYVCPVE7APQDB6DFZYXWA575P2UVMI
 
 CCA7C47RNAE4W24FGZUNSK7EJKCZ5OKHSO3AYHMHQ4D6PC542DFKOXUL
 
+
+## Smart Contract Short Description
 This Soroban smart contract manages community groups and their contribution pools on-chain. It enforces membership and role-based permissions so only authorized users can add members, create pools, contribute, or withdraw funds. It also tracks each pool balance independently to keep funds and accounting transparent across multiple groups.
 
 
