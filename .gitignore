@@ -3,5 +3,5 @@
 /frontend/.next
 /frontend/out
 /frontend/tsconfig.tsbuildinfo
-/frontend/.env.local
+/frontend/.env
 /frontend/.env*.local

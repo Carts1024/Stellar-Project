@@ -4,6 +4,26 @@ Talambag, A portmanteau of Tala (Star/Stellar) and Ambag (Contribution). It lite
 
 Instead of collecting money through opaque chat threads and manually tracking who paid, Talambag records group membership, pool creation, contributions, and organizer withdrawals on-chain.
 
+## UI Screenshots
+
+Add your app screenshots inside `frontend/public/screenshots/` and keep the filenames below to render images automatically in this README.
+
+### Dashboard Overview
+
+![Talambag Dashboard](frontend/public/screenshots/dashboard-overview.png)
+
+### Create Group
+
+![Create Group Form](frontend/public/screenshots/create-group.png)
+
+### Pool Actions (Deposit / Withdraw)
+
+![Pool Actions](frontend/public/screenshots/pool-actions.png)
+
+### Group and Pool Lookup
+
+![Group and Pool Lookup](frontend/public/screenshots/group-pool-lookup.png)
+
 ## Stellar Expert Link
 
 https://stellar.expert/explorer/testnet/contract/CCA7C47RNAE4W24FGZUNSK7EJKCZ5OKHSO3AYHMHQ4D6PC542DFKOXUL
@@ -18,141 +38,111 @@ CCA7C47RNAE4W24FGZUNSK7EJKCZ5OKHSO3AYHMHQ4D6PC542DFKOXUL
 This Soroban smart contract manages community groups and their contribution pools on-chain. It enforces membership and role-based permissions so only authorized users can add members, create pools, contribute, or withdraw funds. It also tracks each pool balance independently to keep funds and accounting transparent across multiple groups.
 
 
-## What The Project Solves
+## Future Scope
 
-Small communities often raise money for:
+Planned next steps for Talambag:
 
-- emergency support
-- medical needs
-- gifts and celebrations
-- shared projects
-- mutual aid
+- list groups and pools directly in the UI instead of loading by ID
+- support richer role management
+- show contribution history and events
+- improve explorer deep links and transaction receipts
+- add end-to-end browser tests
+- add analytics dashboards for pool health and activity trends
+- add exportable contribution reports for community treasurers
 
-The usual workflow is fragile:
 
-- one person creates a chat group
-- people send money manually
-- someone keeps a private spreadsheet or screenshot list
-- members have to trust that the totals are correct
+```
 
-Talambag improves that by giving the group a smart-contract-backed source of truth.
+## Project Setup Guide (Local Development)
 
-## How Talambag Works
+Follow these steps to run Talambag on your machine.
 
-Talambag is built around 2 concepts:
+1. Clone and enter the repository.
 
-1. Groups
-Each group has:
+```bash
+git clone https://github.com/Carts1024/Stellar-Project.git
+cd Stellar-Project
+```
 
-- an owner
-- an asset contract address
-- an approved member list
-- one or more pools
+2. Install required tooling.
 
-2. Pools
-Each pool belongs to a group and has:
+```bash
+rustc --version
+cargo --version
+stellar --version
+node --version
+pnpm --version
+```
 
-- a name
-- an organizer
-- an internal balance tracked by the contract
+3. Install frontend dependencies.
 
-The wallet that creates a pool automatically becomes that pool’s organizer.
+```bash
+cd frontend
+pnpm install
+cd ..
+```
 
-## Core Rules Enforced By The Contract
+4. Build and test the smart contract.
 
-The smart contract guarantees the following:
+```bash
+cargo test
+stellar contract build
+```
 
-- only the group owner can add members to a group
-- only members of a group can create pools inside that group
-- only members of a group can contribute to that group’s pools
-- only the organizer of a specific pool can withdraw from that pool
-- each pool balance is tracked independently, even though funds are held by one contract
+Expected WASM output:
 
-This means Talambag supports multiple groups and multiple pools without mixing balances or permissions.
+```bash
+target/wasm32v1-none/release/talambag.wasm
+```
 
-## Example User Flow
+5. (Optional but recommended) Deploy your contract to testnet.
 
-1. Alice creates a group called `Barangay Emergency Support`
-2. Alice adds Bob and Carla as members
-3. Bob creates a pool called `Hospital Assistance`
-4. Bob becomes the organizer of that pool
-5. Carla deposits funds into the pool
-6. Bob withdraws from that pool to the intended recipient
-7. Anyone with the right IDs can inspect the group and pool state on-chain
+```bash
+stellar contract deploy \
+  --wasm target/wasm32v1-none/release/talambag.wasm \
+  --source burner-key \
+  --network testnet
+```
 
-## Project Architecture
+6. Configure frontend environment variables.
 
-This repository is a small monorepo with 2 main parts:
+```bash
+cd frontend
+cp .env.example .env.local
+```
 
-- Soroban smart contract in [`src/lib.rs`](/home/carts/Documents/Personal/Stellar-Project/src/lib.rs)
-- Next.js frontend in [`frontend/`](/home/carts/Documents/Personal/Stellar-Project/frontend)
+Set these values in `frontend/.env.local`:
 
-### Smart Contract
+```env
+NEXT_PUBLIC_STELLAR_RPC_URL=https://soroban-testnet.stellar.org
+NEXT_PUBLIC_STELLAR_NETWORK=TESTNET
+NEXT_PUBLIC_STELLAR_NETWORK_PASSPHRASE=Test SDF Network ; September 2015
+NEXT_PUBLIC_TALAMBAG_CONTRACT_ID=CCA7C47RNAE4W24FGZUNSK7EJKCZ5OKHSO3AYHMHQ4D6PC542DFKOXUL
+NEXT_PUBLIC_TALAMBAG_ASSET_ADDRESS=CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC
+NEXT_PUBLIC_TALAMBAG_ASSET_CODE=XLM
+NEXT_PUBLIC_TALAMBAG_ASSET_DECIMALS=7
+NEXT_PUBLIC_STELLAR_EXPLORER_URL=https://stellar.expert/explorer/testnet
+NEXT_PUBLIC_STELLAR_READ_ADDRESS=<FUNDED_TESTNET_WALLET_ADDRESS>
+```
 
-The contract is written in Rust with `soroban-sdk` and stores:
+7. Start the frontend development server.
 
-- the next group ID
-- group records
-- group membership records
-- pool records
+```bash
+pnpm dev
+```
 
-Primary contract methods:
+8. Validate frontend quality checks.
 
-- `create_group`
-- `add_member`
-- `create_pool`
-- `deposit`
-- `withdraw`
-- `group`
-- `pool`
-- `is_member`
-- `pool_balance`
+```bash
+pnpm exec tsc --noEmit
+pnpm lint
+pnpm build
+```
 
-Tests live in [`src/test.rs`](/home/carts/Documents/Personal/Stellar-Project/src/test.rs).
-
-### Frontend
-
-The frontend is a Next.js app that integrates with:
-
-- `@stellar/stellar-sdk`
-- `@stellar/freighter-api`
-- Freighter wallet
-- Soroban RPC on Stellar testnet
-
-The UI lets a user:
-
-- connect a wallet
-- create a group
-- add group members
-- create a pool in a selected group
-- load group and pool state by ID
-- deposit to a pool
-- withdraw as the selected pool organizer
-
-## Technology Stack
-
-- Rust
-- Soroban SDK
-- Stellar CLI
-- Next.js
-- React
-- TypeScript
-- pnpm
-- Freighter
-
-## Repo Structure
+9. Open the app in your browser.
 
 ```text
-.
-├── src/
-│   ├── lib.rs
-│   └── test.rs
-├── frontend/
-│   ├── src/
-│   ├── .env.example
-│   └── package.json
-├── Cargo.toml
-└── README.md
+http://localhost:3000
 ```
 
 ## Prerequisites
@@ -417,6 +407,149 @@ stellar contract invoke \
   --pool_id 1
 ```
 
+
+
+
+
+
+## What The Project Solves
+
+Small communities often raise money for:
+
+- emergency support
+- medical needs
+- gifts and celebrations
+- shared projects
+- mutual aid
+
+The usual workflow is fragile:
+
+- one person creates a chat group
+- people send money manually
+- someone keeps a private spreadsheet or screenshot list
+- members have to trust that the totals are correct
+
+Talambag improves that by giving the group a smart-contract-backed source of truth.
+
+## How Talambag Works
+
+Talambag is built around 2 concepts:
+
+1. Groups
+Each group has:
+
+- an owner
+- an asset contract address
+- an approved member list
+- one or more pools
+
+2. Pools
+Each pool belongs to a group and has:
+
+- a name
+- an organizer
+- an internal balance tracked by the contract
+
+The wallet that creates a pool automatically becomes that pool’s organizer.
+
+## Core Rules Enforced By The Contract
+
+The smart contract guarantees the following:
+
+- only the group owner can add members to a group
+- only members of a group can create pools inside that group
+- only members of a group can contribute to that group’s pools
+- only the organizer of a specific pool can withdraw from that pool
+- each pool balance is tracked independently, even though funds are held by one contract
+
+This means Talambag supports multiple groups and multiple pools without mixing balances or permissions.
+
+## Example User Flow
+
+1. Alice creates a group called `Barangay Emergency Support`
+2. Alice adds Bob and Carla as members
+3. Bob creates a pool called `Hospital Assistance`
+4. Bob becomes the organizer of that pool
+5. Carla deposits funds into the pool
+6. Bob withdraws from that pool to the intended recipient
+7. Anyone with the right IDs can inspect the group and pool state on-chain
+
+## Project Architecture
+
+This repository is a small monorepo with 2 main parts:
+
+- Soroban smart contract in [`src/lib.rs`](/home/carts/Documents/Personal/Stellar-Project/src/lib.rs)
+- Next.js frontend in [`frontend/`](/home/carts/Documents/Personal/Stellar-Project/frontend)
+
+### Smart Contract
+
+The contract is written in Rust with `soroban-sdk` and stores:
+
+- the next group ID
+- group records
+- group membership records
+- pool records
+
+Primary contract methods:
+
+- `create_group`
+- `add_member`
+- `create_pool`
+- `deposit`
+- `withdraw`
+- `group`
+- `pool`
+- `is_member`
+- `pool_balance`
+
+Tests live in [`src/test.rs`](/home/carts/Documents/Personal/Stellar-Project/src/test.rs).
+
+### Frontend
+
+The frontend is a Next.js app that integrates with:
+
+- `@stellar/stellar-sdk`
+- `@stellar/freighter-api`
+- Freighter wallet
+- Soroban RPC on Stellar testnet
+
+The UI lets a user:
+
+- connect a wallet
+- create a group
+- add group members
+- create a pool in a selected group
+- load group and pool state by ID
+- deposit to a pool
+- withdraw as the selected pool organizer
+
+## Technology Stack
+
+- Rust
+- Soroban SDK
+- Stellar CLI
+- Next.js
+- React
+- TypeScript
+- pnpm
+- Freighter
+
+## Repo Structure
+
+```text
+.
+├── src/
+│   ├── lib.rs
+│   └── test.rs
+├── frontend/
+│   ├── src/
+│   ├── .env.example
+│   └── package.json
+├── Cargo.toml
+└── README.md
+
+
+
 ## Current Status
 
 This project currently includes:
@@ -427,15 +560,7 @@ This project currently includes:
 - typed client-side contract interaction code
 - testnet-oriented configuration
 
-## Future Improvements
 
-Possible next steps:
-
-- list groups and pools directly in the UI instead of loading by ID
-- support richer role management
-- show contribution history and events
-- improve explorer deep links and transaction receipts
-- add end-to-end browser tests
 
 
 
