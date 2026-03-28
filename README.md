@@ -28,6 +28,7 @@ Add your app screenshots inside `frontend/public/screenshots/` and keep the file
 
 https://stellar.expert/explorer/testnet/contract/CCA7C47RNAE4W24FGZUNSK7EJKCZ5OKHSO3AYHMHQ4D6PC542DFKOXUL
 
+![Stellar Expert Contract ](frontend/public/screenshots/talambag-contract.png)
 
 ## Smart Contract Address
 
