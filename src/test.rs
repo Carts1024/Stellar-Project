@@ -3,10 +3,11 @@
 extern crate std;
 
 use super::{Error, Group, Pool, TalambagContract, TalambagContractClient};
-use soroban_sdk::{testutils::Address as _, token, Address, Env, String};
+use soroban_sdk::{symbol_short, testutils::Address as _, token, Address, Env, IntoVal, String};
 
 mod tests {
     use super::*;
+    use soroban_sdk::testutils::Events;
     use std::boxed::Box;
 
     struct TestContext {
@@ -159,5 +160,73 @@ mod tests {
         assert!(context.client.is_member(&group_id, &context.contributor));
         assert_eq!(pool.organizer, context.pool_creator);
         assert_eq!(pool.balance, 300);
+    }
+
+    #[test]
+    fn group_count_reflects_created_groups() {
+        let context = setup();
+
+        assert_eq!(context.client.group_count(), 1);
+
+        context.client.create_group(
+            &context.group_owner,
+            &text(&context.env, "First Group"),
+            &context.asset_address,
+        );
+        assert_eq!(context.client.group_count(), 2);
+
+        context.client.create_group(
+            &context.group_owner,
+            &text(&context.env, "Second Group"),
+            &context.asset_address,
+        );
+        assert_eq!(context.client.group_count(), 3);
+    }
+
+    #[test]
+    fn deposit_emits_event() {
+        let context = setup();
+        let group_id = create_group_with_members(&context);
+        let pool_id = create_pool(&context, group_id);
+
+        context
+            .client
+            .deposit(&context.contributor, &group_id, &pool_id, &500);
+
+        let events = context.env.events().all();
+        let last = events.last().unwrap();
+
+        assert_eq!(last.0, context.client.address);
+        assert_eq!(
+            last.1,
+            (symbol_short!("deposit"), group_id, pool_id).into_val(&context.env)
+        );
+    }
+
+    #[test]
+    fn withdraw_emits_event() {
+        let context = setup();
+        let group_id = create_group_with_members(&context);
+        let pool_id = create_pool(&context, group_id);
+
+        context
+            .client
+            .deposit(&context.contributor, &group_id, &pool_id, &400);
+        context.client.withdraw(
+            &context.pool_creator,
+            &group_id,
+            &pool_id,
+            &context.recipient,
+            &150,
+        );
+
+        let events = context.env.events().all();
+        let last = events.last().unwrap();
+
+        assert_eq!(last.0, context.client.address);
+        assert_eq!(
+            last.1,
+            (symbol_short!("withdraw"), group_id, pool_id).into_val(&context.env)
+        );
     }
 }

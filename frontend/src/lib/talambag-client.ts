@@ -11,7 +11,7 @@ import {
 } from "@stellar/stellar-sdk";
 import { appConfig, getExpectedNetworkPassphrase, hasRequiredConfig } from "@/lib/config";
 import { signWithFreighter } from "@/lib/freighter";
-import type { ContractSnapshot, GroupSummary, PoolSummary } from "@/lib/types";
+import type { ContractSnapshot, GroupSummary, PoolEvent, PoolSummary } from "@/lib/types";
 
 type ContractArg = {
   value: string | bigint | number;
@@ -425,4 +425,99 @@ export async function withdrawFromPool(
       { value: amount, type: "i128" },
     ]),
   );
+}
+
+export async function readGroupCount() {
+  return simulateRead(
+    getReadAddress(),
+    "group_count",
+    buildArgs([]),
+    normalizeNumber,
+  );
+}
+
+export async function listGroups(): Promise<GroupSummary[]> {
+  ensureConfigured();
+  const count = await readGroupCount();
+  if (count <= 1) return [];
+
+  const results = await Promise.allSettled(
+    Array.from({ length: count - 1 }, (_, i) => readGroup(i + 1)),
+  );
+
+  return results
+    .filter((r): r is PromiseFulfilledResult<GroupSummary> => r.status === "fulfilled")
+    .map((r) => r.value);
+}
+
+export async function listPools(groupId: number, nextPoolId: number): Promise<PoolSummary[]> {
+  ensureConfigured();
+  if (nextPoolId <= 1) return [];
+
+  const results = await Promise.allSettled(
+    Array.from({ length: nextPoolId - 1 }, (_, i) => readPool(groupId, i + 1)),
+  );
+
+  return results
+    .filter((r): r is PromiseFulfilledResult<PoolSummary> => r.status === "fulfilled")
+    .map((r) => r.value);
+}
+
+export async function fetchPoolEvents(
+  groupId: number,
+  poolId: number,
+): Promise<PoolEvent[]> {
+  ensureConfigured();
+  const server = getServer();
+
+  try {
+    const contractId = appConfig.contractId;
+    const events: PoolEvent[] = [];
+
+    for (const topic of ["deposit", "withdraw"] as const) {
+      const response = await server.getEvents({
+        startLedger: 0,
+        filters: [
+          {
+            type: "contract",
+            contractIds: [contractId],
+            topics: [
+              [
+                nativeToScVal(topic, { type: "symbol" }).toXDR("base64"),
+                nativeToScVal(groupId, { type: "u32" }).toXDR("base64"),
+                nativeToScVal(poolId, { type: "u32" }).toXDR("base64"),
+              ],
+            ],
+          },
+        ],
+        limit: 50,
+      });
+
+      for (const event of response.events) {
+        const data = event.value ? scValToNative(event.value) : null;
+        if (topic === "deposit" && data) {
+          events.push({
+            type: "deposit",
+            from: normalizeAddress(Array.isArray(data) ? data[0] : data),
+            amount: normalizeBigInt(Array.isArray(data) ? data[1] : 0n),
+            timestamp: event.ledgerClosedAt ?? new Date(0).toISOString(),
+            txHash: event.txHash,
+          });
+        } else if (topic === "withdraw" && data) {
+          events.push({
+            type: "withdraw",
+            from: normalizeAddress(Array.isArray(data) ? data[0] : data),
+            to: Array.isArray(data) && data.length > 1 ? normalizeAddress(data[1]) : undefined,
+            amount: normalizeBigInt(Array.isArray(data) ? data[2] ?? data[1] : 0n),
+            timestamp: event.ledgerClosedAt ?? new Date(0).toISOString(),
+            txHash: event.txHash,
+          });
+        }
+      }
+    }
+
+    return events.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  } catch {
+    return [];
+  }
 }
