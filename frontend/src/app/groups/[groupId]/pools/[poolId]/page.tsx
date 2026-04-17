@@ -27,6 +27,7 @@ export default function PoolPage() {
   const [isMember, setIsMember] = useState(false);
   const [events, setEvents] = useState<PoolEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [eventsLoading, setEventsLoading] = useState(true);
   const [showDeposit, setShowDeposit] = useState(false);
   const [feedback, setFeedback] = useState<TxFeedback>({ state: "idle", title: "" });
 
@@ -52,12 +53,14 @@ export default function PoolPage() {
 
       const poolEvents = await fetchPoolEvents(groupId, poolId);
       setEvents(poolEvents);
+      setEventsLoading(false);
     } catch (error) {
       setFeedback({
         state: "error",
         title: "Error",
         detail: error instanceof Error ? error.message : "Failed to load pool.",
       });
+      setEventsLoading(false);
     } finally {
       setIsLoading(false);
     }
@@ -246,10 +249,15 @@ export default function PoolPage() {
       {/* Transaction History */}
       <section style={{ marginTop: 28 }}>
         <h2 style={{ margin: "0 0 12px", fontSize: "1.35rem" }}>Transaction History</h2>
-        {events.length === 0 ? (
+        {eventsLoading ? (
+          <div className="loading-state">Loading events...</div>
+        ) : events.length === 0 ? (
           <div className="empty-state">
-            <h3>No transactions yet</h3>
-            <p>Deposit and withdrawal events will appear here.</p>
+            <h3>No events recorded yet</h3>
+            <p>
+              Deposit and withdrawal events will appear here after the first transaction on this
+              pool. Only events from the last ~7 days are available via the RPC node.
+            </p>
           </div>
         ) : (
           <div className="tx-table-wrapper">

@@ -8,6 +8,7 @@ import {
   nativeToScVal,
   rpc,
   scValToNative,
+  xdr,
 } from "@stellar/stellar-sdk";
 import { appConfig, getExpectedNetworkPassphrase, hasRequiredConfig } from "@/lib/config";
 import { signWithFreighter } from "@/lib/freighter";
@@ -468,56 +469,71 @@ export async function fetchPoolEvents(
   poolId: number,
 ): Promise<PoolEvent[]> {
   ensureConfigured();
-  const server = getServer();
 
-  try {
-    const contractId = appConfig.contractId;
-    const events: PoolEvent[] = [];
+  const contractId = appConfig.contractId;
 
-    for (const topic of ["deposit", "withdraw"] as const) {
-      const response = await server.getEvents({
-        startLedger: 0,
-        filters: [
-          {
-            type: "contract",
-            contractIds: [contractId],
-            topics: [
-              [
-                nativeToScVal(topic, { type: "symbol" }).toXDR("base64"),
-                nativeToScVal(groupId, { type: "u32" }).toXDR("base64"),
-                nativeToScVal(poolId, { type: "u32" }).toXDR("base64"),
-              ],
-            ],
-          },
-        ],
-        limit: 50,
-      });
+  // The public Soroban RPC at soroban-testnet.stellar.org has event-indexing gaps
+  // caused by load-balanced backend nodes with different event state.
+  // Stellar Expert exposes a public CORS-enabled REST API with complete event history
+  // and is the reliable source for contract events on testnet/mainnet.
+  const apiBase = appConfig.explorerUrl.replace(
+    "https://stellar.expert/",
+    "https://api.stellar.expert/",
+  );
+  const url = `${apiBase}/contract/${contractId}/events?limit=200&order=desc`;
 
-      for (const event of response.events) {
-        const data = event.value ? scValToNative(event.value) : null;
-        if (topic === "deposit" && data) {
-          events.push({
-            type: "deposit",
-            from: normalizeAddress(Array.isArray(data) ? data[0] : data),
-            amount: normalizeBigInt(Array.isArray(data) ? data[1] : 0n),
-            timestamp: event.ledgerClosedAt ?? new Date(0).toISOString(),
-            txHash: event.txHash,
-          });
-        } else if (topic === "withdraw" && data) {
-          events.push({
-            type: "withdraw",
-            from: normalizeAddress(Array.isArray(data) ? data[0] : data),
-            to: Array.isArray(data) && data.length > 1 ? normalizeAddress(data[1]) : undefined,
-            amount: normalizeBigInt(Array.isArray(data) ? data[2] ?? data[1] : 0n),
-            timestamp: event.ledgerClosedAt ?? new Date(0).toISOString(),
-            txHash: event.txHash,
-          });
-        }
-      }
-    }
-
-    return events.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
-  } catch {
-    return [];
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Event API returned HTTP ${response.status}`);
   }
+
+  const json = (await response.json()) as {
+    _embedded: {
+      records: Array<{
+        id: string;
+        ts: number;
+        topics: string[];
+        bodyXdr: string;
+      }>;
+    };
+  };
+
+  const events: PoolEvent[] = [];
+
+  for (const record of json._embedded.records) {
+    const [action, topicGroupId, topicPoolId] = record.topics;
+    if (String(topicGroupId) !== String(groupId)) continue;
+    if (String(topicPoolId) !== String(poolId)) continue;
+    if (action !== "deposit" && action !== "withdraw") continue;
+
+    const bodyScVal = xdr.ScVal.fromXDR(record.bodyXdr, "base64");
+    const data = scValToNative(bodyScVal) as unknown[];
+    const timestamp = new Date(record.ts * 1000).toISOString();
+
+    if (action === "deposit") {
+      events.push({
+        type: "deposit",
+        from: normalizeAddress(Array.isArray(data) ? data[0] : data),
+        amount: normalizeBigInt(Array.isArray(data) ? data[1] : 0n),
+        timestamp,
+      });
+    } else {
+      events.push({
+        type: "withdraw",
+        from: normalizeAddress(Array.isArray(data) ? data[0] : data),
+        to: Array.isArray(data) && data.length > 1 ? normalizeAddress(data[1]) : undefined,
+        amount: normalizeBigInt(
+          Array.isArray(data) && data.length > 2
+            ? data[2]
+            : Array.isArray(data)
+              ? data[1]
+              : 0n,
+        ),
+        timestamp,
+      });
+    }
+  }
+
+  // API returns records in descending order (most recent first).
+  return events;
 }
