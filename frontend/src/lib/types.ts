@@ -26,6 +26,15 @@ export type PoolSummary = {
   balance: bigint;
 };
 
+export type PoolEvent = {
+  type: "deposit" | "withdraw";
+  from: string;
+  to?: string;
+  amount: bigint;
+  timestamp: string;
+  txHash?: string;
+};
+
 export type ContractSnapshot = {
   status: ContractStatus;
   selectedGroupId: number | null;

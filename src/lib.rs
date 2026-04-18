@@ -1,7 +1,7 @@
 #![no_std]
 
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, token, Address, Env, String,
+    contract, contracterror, contractimpl, contracttype, symbol_short, token, Address, Env, String,
 };
 
 #[derive(Clone)]
@@ -169,6 +169,9 @@ impl TalambagContract {
             .instance()
             .set(&DataKey::Pool(group_id, pool_id), &pool);
 
+        env.events()
+            .publish((symbol_short!("deposit"), group_id, pool_id), (from, amount));
+
         Ok(())
     }
 
@@ -205,7 +208,19 @@ impl TalambagContract {
             .instance()
             .set(&DataKey::Pool(group_id, pool_id), &pool);
 
+        env.events().publish(
+            (symbol_short!("withdraw"), group_id, pool_id),
+            (organizer, to, amount),
+        );
+
         Ok(())
+    }
+
+    pub fn group_count(env: Env) -> u32 {
+        env.storage()
+            .instance()
+            .get(&DataKey::NextGroupId)
+            .unwrap_or(1)
     }
 
     pub fn group(env: Env, group_id: u32) -> Result<Group, Error> {

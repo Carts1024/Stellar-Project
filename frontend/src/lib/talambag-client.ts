@@ -8,10 +8,11 @@ import {
   nativeToScVal,
   rpc,
   scValToNative,
+  xdr,
 } from "@stellar/stellar-sdk";
 import { appConfig, getExpectedNetworkPassphrase, hasRequiredConfig } from "@/lib/config";
 import { signWithFreighter } from "@/lib/freighter";
-import type { ContractSnapshot, GroupSummary, PoolSummary } from "@/lib/types";
+import type { ContractSnapshot, GroupSummary, PoolEvent, PoolSummary } from "@/lib/types";
 
 type ContractArg = {
   value: string | bigint | number;
@@ -425,4 +426,114 @@ export async function withdrawFromPool(
       { value: amount, type: "i128" },
     ]),
   );
+}
+
+export async function readGroupCount() {
+  return simulateRead(
+    getReadAddress(),
+    "group_count",
+    buildArgs([]),
+    normalizeNumber,
+  );
+}
+
+export async function listGroups(): Promise<GroupSummary[]> {
+  ensureConfigured();
+  const count = await readGroupCount();
+  if (count <= 1) return [];
+
+  const results = await Promise.allSettled(
+    Array.from({ length: count - 1 }, (_, i) => readGroup(i + 1)),
+  );
+
+  return results
+    .filter((r): r is PromiseFulfilledResult<GroupSummary> => r.status === "fulfilled")
+    .map((r) => r.value);
+}
+
+export async function listPools(groupId: number, nextPoolId: number): Promise<PoolSummary[]> {
+  ensureConfigured();
+  if (nextPoolId <= 1) return [];
+
+  const results = await Promise.allSettled(
+    Array.from({ length: nextPoolId - 1 }, (_, i) => readPool(groupId, i + 1)),
+  );
+
+  return results
+    .filter((r): r is PromiseFulfilledResult<PoolSummary> => r.status === "fulfilled")
+    .map((r) => r.value);
+}
+
+export async function fetchPoolEvents(
+  groupId: number,
+  poolId: number,
+): Promise<PoolEvent[]> {
+  ensureConfigured();
+
+  const contractId = appConfig.contractId;
+
+  // The public Soroban RPC at soroban-testnet.stellar.org has event-indexing gaps
+  // caused by load-balanced backend nodes with different event state.
+  // Stellar Expert exposes a public CORS-enabled REST API with complete event history
+  // and is the reliable source for contract events on testnet/mainnet.
+  const apiBase = appConfig.explorerUrl.replace(
+    "https://stellar.expert/",
+    "https://api.stellar.expert/",
+  );
+  const url = `${apiBase}/contract/${contractId}/events?limit=200&order=desc`;
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Event API returned HTTP ${response.status}`);
+  }
+
+  const json = (await response.json()) as {
+    _embedded: {
+      records: Array<{
+        id: string;
+        ts: number;
+        topics: string[];
+        bodyXdr: string;
+      }>;
+    };
+  };
+
+  const events: PoolEvent[] = [];
+
+  for (const record of json._embedded.records) {
+    const [action, topicGroupId, topicPoolId] = record.topics;
+    if (String(topicGroupId) !== String(groupId)) continue;
+    if (String(topicPoolId) !== String(poolId)) continue;
+    if (action !== "deposit" && action !== "withdraw") continue;
+
+    const bodyScVal = xdr.ScVal.fromXDR(record.bodyXdr, "base64");
+    const data = scValToNative(bodyScVal) as unknown[];
+    const timestamp = new Date(record.ts * 1000).toISOString();
+
+    if (action === "deposit") {
+      events.push({
+        type: "deposit",
+        from: normalizeAddress(Array.isArray(data) ? data[0] : data),
+        amount: normalizeBigInt(Array.isArray(data) ? data[1] : 0n),
+        timestamp,
+      });
+    } else {
+      events.push({
+        type: "withdraw",
+        from: normalizeAddress(Array.isArray(data) ? data[0] : data),
+        to: Array.isArray(data) && data.length > 1 ? normalizeAddress(data[1]) : undefined,
+        amount: normalizeBigInt(
+          Array.isArray(data) && data.length > 2
+            ? data[2]
+            : Array.isArray(data)
+              ? data[1]
+              : 0n,
+        ),
+        timestamp,
+      });
+    }
+  }
+
+  // API returns records in descending order (most recent first).
+  return events;
 }
