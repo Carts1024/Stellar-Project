@@ -470,19 +470,9 @@ export async function fetchPoolEvents(
 ): Promise<PoolEvent[]> {
   ensureConfigured();
 
-  const contractId = appConfig.contractId;
-
-  // The public Soroban RPC at soroban-testnet.stellar.org has event-indexing gaps
-  // caused by load-balanced backend nodes with different event state.
-  // Stellar Expert exposes a public CORS-enabled REST API with complete event history
-  // and is the reliable source for contract events on testnet/mainnet.
-  const apiBase = appConfig.explorerUrl.replace(
-    "https://stellar.expert/",
-    "https://api.stellar.expert/",
-  );
-  const url = `${apiBase}/contract/${contractId}/events?limit=200&order=desc`;
-
-  const response = await fetch(url);
+  // Proxy through our own Next.js API route to avoid CORS restrictions when
+  // calling api.stellar.expert from the browser in production.
+  const response = await fetch("/api/contract-events");
   if (!response.ok) {
     throw new Error(`Event API returned HTTP ${response.status}`);
   }
