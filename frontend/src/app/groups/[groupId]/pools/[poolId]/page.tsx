@@ -278,19 +278,50 @@ export default function PoolPage() {
                 </tr>
               </thead>
               <tbody>
-                {events.map((event, i) => (
-                  <tr key={i}>
-                    <td>
-                      <span className={`tx-badge ${event.type}`}>{event.type}</span>
-                    </td>
-                    <td>{shortenAddress(event.from)}</td>
-                    <td>{event.to ? shortenAddress(event.to) : "—"}</td>
-                    <td>
-                      {formatAmount(event.amount, appConfig.assetDecimals)} {appConfig.assetCode}
-                    </td>
-                    <td>{event.timestamp ? new Date(event.timestamp).toLocaleString() : "—"}</td>
-                  </tr>
-                ))}
+                {events.map((event, i) => {
+                  const explorerHref = event.txHash
+                    ? `${appConfig.explorerUrl}/tx/${event.txHash}`
+                    : undefined;
+
+                  return (
+                    <tr
+                      key={i}
+                      className={explorerHref ? "tx-row tx-row--clickable" : "tx-row"}
+                      onClick={
+                        explorerHref
+                          ? () => window.open(explorerHref, "_blank", "noreferrer")
+                          : undefined
+                      }
+                      onKeyDown={
+                        explorerHref
+                          ? (e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                window.open(explorerHref, "_blank", "noreferrer");
+                              }
+                            }
+                          : undefined
+                      }
+                      tabIndex={explorerHref ? 0 : undefined}
+                      role={explorerHref ? "link" : undefined}
+                      aria-label={
+                        explorerHref
+                          ? `View ${event.type} transaction on Stellar Expert`
+                          : undefined
+                      }
+                    >
+                      <td>
+                        <span className={`tx-badge ${event.type}`}>{event.type}</span>
+                      </td>
+                      <td>{shortenAddress(event.from)}</td>
+                      <td>{event.to ? shortenAddress(event.to) : "—"}</td>
+                      <td>
+                        {formatAmount(event.amount, appConfig.assetDecimals)} {appConfig.assetCode}
+                      </td>
+                      <td>{event.timestamp ? new Date(event.timestamp).toLocaleString() : "—"}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
