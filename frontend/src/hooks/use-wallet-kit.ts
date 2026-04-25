@@ -18,6 +18,7 @@ const initialWalletState: WalletSnapshot = {
   network: null,
   networkPassphrase: null,
   isExpectedNetwork: false,
+  isNetworkVerified: false,
   xlmBalance: null,
 };
 

@@ -68,6 +68,14 @@ type WalletKitEventSubscriptions = {
   onWalletSelected?: (event: KitEventWalletSelected) => void;
 };
 
+type WalletNetworkResolution = {
+  network: string | null;
+  networkPassphrase: string | null;
+  isExpectedNetwork: boolean;
+  isNetworkVerified: boolean;
+  error?: string;
+};
+
 function createWalletSnapshot(overrides: Partial<WalletSnapshot> = {}): WalletSnapshot {
   return {
     status: "disconnected",
@@ -77,6 +85,7 @@ function createWalletSnapshot(overrides: Partial<WalletSnapshot> = {}): WalletSn
     network: null,
     networkPassphrase: null,
     isExpectedNetwork: false,
+    isNetworkVerified: false,
     xlmBalance: null,
     ...overrides,
   };
@@ -123,6 +132,16 @@ function getKitNetwork(): KitNetworkPassphrase {
 
 function normalizeErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message.trim()) {
+    return error.message.trim();
+  }
+
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string" &&
+    error.message.trim()
+  ) {
     return error.message.trim();
   }
 
@@ -201,6 +220,81 @@ async function readSelectedWalletMeta() {
   }
 }
 
+function normalizeOptionalString(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmedValue = value.trim();
+  return trimmedValue ? trimmedValue : null;
+}
+
+function isUnsupportedNetworkReadError(error: unknown) {
+  const normalizedMessage = normalizeErrorMessage(error, "").toLowerCase();
+
+  return (
+    normalizedMessage.includes("does not support the \"getnetwork\" function") ||
+    normalizedMessage.includes("does not support the \"getnetwork\" method") ||
+    normalizedMessage.includes("does not support the getnetwork function") ||
+    normalizedMessage.includes("does not support the getnetwork method") ||
+    normalizedMessage.includes("getnetwork") && normalizedMessage.includes("does not support")
+  );
+}
+
+function createConfiguredNetworkResolution(): WalletNetworkResolution {
+  const expectedPassphrase = getExpectedNetworkPassphrase();
+
+  return {
+    network: normalizeNetworkName(appConfig.network, expectedPassphrase),
+    networkPassphrase: expectedPassphrase,
+    isExpectedNetwork: true,
+    isNetworkVerified: false,
+  };
+}
+
+async function readWalletAddress(): Promise<string | null> {
+  const { StellarWalletsKit } = await loadWalletKitRuntime();
+
+  try {
+    const response = await StellarWalletsKit.getAddress();
+    return normalizeAddress(response.address);
+  } catch {
+    return null;
+  }
+}
+
+async function readWalletNetworkResolution(): Promise<WalletNetworkResolution> {
+  const { StellarWalletsKit } = await loadWalletKitRuntime();
+
+  try {
+    const response = await StellarWalletsKit.getNetwork();
+    const networkPassphrase = normalizeOptionalString(response.networkPassphrase);
+
+    if (!networkPassphrase) {
+      throw new Error("The wallet returned an empty network passphrase.");
+    }
+
+    return {
+      network: normalizeNetworkName(normalizeOptionalString(response.network), networkPassphrase),
+      networkPassphrase,
+      isExpectedNetwork: networkPassphrase === getExpectedNetworkPassphrase(),
+      isNetworkVerified: true,
+    };
+  } catch (error) {
+    if (isUnsupportedNetworkReadError(error)) {
+      return createConfiguredNetworkResolution();
+    }
+
+    return {
+      network: null,
+      networkPassphrase: null,
+      isExpectedNetwork: false,
+      isNetworkVerified: false,
+      error: normalizeWalletError(error, "network", "Unable to read the active wallet network."),
+    };
+  }
+}
+
 function normalizeNetworkName(network: string | null, networkPassphrase: string | null) {
   if (network && network.trim()) {
     return network.trim();
@@ -252,32 +346,15 @@ export async function fetchXlmBalance(address: string): Promise<string> {
 export async function readWalletSnapshot(): Promise<WalletSnapshot> {
   await ensureWalletKitInitialized();
 
-  const { StellarWalletsKit } = await loadWalletKitRuntime();
-
   const walletMeta = await readSelectedWalletMeta();
 
-  let address: string;
-  try {
-    const response = await StellarWalletsKit.getAddress();
-    address = normalizeAddress(response.address);
-  } catch {
+  const address = await readWalletAddress();
+
+  if (!address) {
     return createWalletSnapshot(walletMeta);
   }
 
-  let networkName: string | null = null;
-  let networkPassphrase: string | null = null;
-  let networkError: string | undefined;
-
-  try {
-    const network = await StellarWalletsKit.getNetwork();
-    networkName = network.network ?? null;
-    networkPassphrase = network.networkPassphrase ?? null;
-  } catch (error) {
-    networkError = normalizeWalletError(error, "network", "Unable to read the active wallet network.");
-  }
-
-  const normalizedPassphrase = networkPassphrase ?? getExpectedNetworkPassphrase();
-  const isExpectedNetwork = normalizedPassphrase === getExpectedNetworkPassphrase();
+  const networkResolution = await readWalletNetworkResolution();
 
   let xlmBalance: string | null = null;
   try {
@@ -290,11 +367,12 @@ export async function readWalletSnapshot(): Promise<WalletSnapshot> {
     status: "connected",
     address,
     ...walletMeta,
-    network: normalizeNetworkName(networkName, normalizedPassphrase),
-    networkPassphrase: normalizedPassphrase,
-    isExpectedNetwork,
+    network: networkResolution.network,
+    networkPassphrase: networkResolution.networkPassphrase,
+    isExpectedNetwork: networkResolution.isExpectedNetwork,
+    isNetworkVerified: networkResolution.isNetworkVerified,
     xlmBalance,
-    error: networkError,
+    error: networkResolution.error,
   });
 }
 

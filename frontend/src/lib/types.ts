@@ -53,6 +53,7 @@ export type WalletSnapshot = {
   network: string | null;
   networkPassphrase: string | null;
   isExpectedNetwork: boolean;
+  isNetworkVerified: boolean;
   xlmBalance: string | null;
   error?: string;
 };

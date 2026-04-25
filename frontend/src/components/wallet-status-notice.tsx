@@ -12,7 +12,7 @@ type WalletNotice = {
 function getWalletNotice(
   wallet: ReturnType<typeof useWallet>["wallet"],
 ): WalletNotice | null {
-  if (wallet.status === "connected" && !wallet.isExpectedNetwork) {
+  if (wallet.status === "connected" && wallet.isNetworkVerified && !wallet.isExpectedNetwork) {
     const connectedNetwork = wallet.network ?? wallet.networkPassphrase ?? "Unknown network";
 
     return {
