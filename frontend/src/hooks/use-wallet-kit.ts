@@ -45,7 +45,7 @@ export function useWalletKit() {
     }
 
     try {
-      ensureWalletKitInitialized();
+      await ensureWalletKitInitialized();
       const snapshot = await readWalletSnapshot();
       setWallet(snapshot);
       return snapshot;
@@ -92,26 +92,37 @@ export function useWalletKit() {
 
   useEffect(() => {
     let isMounted = true;
+    let unsubscribe = () => {};
 
-    const unsubscribe = subscribeWalletKitEvents({
-      onStateUpdated: () => {
-        if (isMounted) {
-          void syncWallet(false);
-        }
-      },
-      onWalletSelected: () => {
-        if (isMounted) {
-          void syncWallet(false);
-        }
-      },
-      onDisconnect: () => {
-        if (isMounted) {
-          setWallet(initialWalletState);
-        }
-      },
-    });
+    async function setupWalletKit() {
+      const stop = await subscribeWalletKitEvents({
+        onStateUpdated: () => {
+          if (isMounted) {
+            void syncWallet(false);
+          }
+        },
+        onWalletSelected: () => {
+          if (isMounted) {
+            void syncWallet(false);
+          }
+        },
+        onDisconnect: () => {
+          if (isMounted) {
+            setWallet(initialWalletState);
+          }
+        },
+      });
 
-    void syncWallet(false);
+      if (!isMounted) {
+        stop();
+        return;
+      }
+
+      unsubscribe = stop;
+      await syncWallet(false);
+    }
+
+    void setupWalletKit();
 
     return () => {
       isMounted = false;

@@ -1,15 +1,10 @@
 "use client";
 
-import { ButtonMode, ButtonSize, type SwkButtonProps } from "@creit-tech/stellar-wallets-kit/components";
-import { defaultModules } from "@creit-tech/stellar-wallets-kit/modules/utils";
-import { StellarWalletsKit } from "@creit-tech/stellar-wallets-kit/sdk";
 import {
-  KitEventType,
-  Networks as KitNetworks,
-  SwkAppLightTheme,
   type KitEventDisconnected,
   type KitEventStateUpdated,
   type KitEventWalletSelected,
+  type Networks,
   type SwkAppTheme,
 } from "@creit-tech/stellar-wallets-kit/types";
 import { Horizon } from "@stellar/stellar-sdk";
@@ -17,36 +12,55 @@ import { appConfig, getExpectedNetworkPassphrase } from "@/lib/config";
 import type { WalletSnapshot } from "@/lib/types";
 import { isValidStellarAddress } from "@/lib/validators";
 
+const KIT_NETWORKS = {
+  PUBLIC: "Public Global Stellar Network ; September 2015",
+  TESTNET: "Test SDF Network ; September 2015",
+  FUTURENET: "Test SDF Future Network ; October 2022",
+  SANDBOX: "Local Sandbox Stellar Network ; September 2022",
+  STANDALONE: "Standalone Network ; February 2017",
+} as const;
+
+type KitNetworkPassphrase = (typeof KIT_NETWORKS)[keyof typeof KIT_NETWORKS];
+
+type WalletKitRuntime = {
+  StellarWalletsKit: typeof import("@creit-tech/stellar-wallets-kit/sdk").StellarWalletsKit;
+  defaultModules: typeof import("@creit-tech/stellar-wallets-kit/modules/utils").defaultModules;
+  KitEventType: typeof import("@creit-tech/stellar-wallets-kit/types").KitEventType;
+};
+
 const networkLabelByPassphrase = new Map<string, string>([
-  [KitNetworks.PUBLIC, "PUBLIC"],
-  [KitNetworks.TESTNET, "TESTNET"],
-  [KitNetworks.FUTURENET, "FUTURENET"],
-  [KitNetworks.SANDBOX, "SANDBOX"],
-  [KitNetworks.STANDALONE, "STANDALONE"],
+  [KIT_NETWORKS.PUBLIC, "PUBLIC"],
+  [KIT_NETWORKS.TESTNET, "TESTNET"],
+  [KIT_NETWORKS.FUTURENET, "FUTURENET"],
+  [KIT_NETWORKS.SANDBOX, "SANDBOX"],
+  [KIT_NETWORKS.STANDALONE, "STANDALONE"],
 ]);
 
 const kitTheme: SwkAppTheme = {
-  ...SwkAppLightTheme,
-  background: "#fff8ed",
-  "background-secondary": "rgba(255, 250, 241, 0.96)",
+  background: "rgba(253, 250, 244, 0.97)",
+  "background-secondary": "rgba(248, 244, 234, 0.98)",
   "foreground-strong": "#17251f",
   foreground: "#24352d",
   "foreground-secondary": "#59675f",
   primary: "#0f766e",
-  "primary-foreground": "#f5f6f2",
+  "primary-foreground": "#ffffff",
   transparent: "rgba(255, 255, 255, 0)",
-  lighter: "#fffdf8",
-  light: "#f7f2e8",
-  "light-gray": "#e3d8c9",
+  lighter: "#ffffff",
+  light: "rgba(255, 255, 255, 0.65)",
+  "light-gray": "rgba(23, 37, 31, 0.06)",
   gray: "#8a958d",
   danger: "#c75b4f",
-  border: "rgba(23, 37, 31, 0.12)",
-  shadow: "0 24px 60px rgba(24, 30, 26, 0.12)",
-  "border-radius": "999px",
-  "font-family": '"Segoe UI", "Helvetica Neue", sans-serif',
+  border: "rgba(23, 37, 31, 0.08)",
+  shadow: "0 20px 60px rgba(0, 0, 0, 0.16), 0 4px 16px rgba(0, 0, 0, 0.06)",
+  "border-radius": "1.5rem",
+  "font-family": '"Inter", "Segoe UI", system-ui, sans-serif',
 };
 
 let walletKitInitialized = false;
+let walletKitRuntimePromise: Promise<WalletKitRuntime> | null = null;
+let walletKitInitializationPromise: Promise<void> | null = null;
+
+type WalletErrorContext = "connect" | "network" | "sign";
 
 type WalletKitEventSubscriptions = {
   onDisconnect?: (event: KitEventDisconnected) => void;
@@ -68,27 +82,43 @@ function createWalletSnapshot(overrides: Partial<WalletSnapshot> = {}): WalletSn
   };
 }
 
-function getKitNetwork() {
+async function loadWalletKitRuntime(): Promise<WalletKitRuntime> {
+  if (!walletKitRuntimePromise) {
+    walletKitRuntimePromise = Promise.all([
+      import("@creit-tech/stellar-wallets-kit/sdk"),
+      import("@creit-tech/stellar-wallets-kit/modules/utils"),
+      import("@creit-tech/stellar-wallets-kit/types"),
+    ]).then(([sdkModule, utilsModule, typesModule]) => ({
+      StellarWalletsKit: sdkModule.StellarWalletsKit,
+      defaultModules: utilsModule.defaultModules,
+      KitEventType: typesModule.KitEventType,
+    }));
+  }
+
+  return walletKitRuntimePromise;
+}
+
+function getKitNetwork(): KitNetworkPassphrase {
   const expectedPassphrase = getExpectedNetworkPassphrase();
   const configuredName = appConfig.network.trim().toUpperCase();
 
-  if (expectedPassphrase === KitNetworks.PUBLIC || configuredName === "PUBLIC" || configuredName === "PUBNET") {
-    return KitNetworks.PUBLIC;
+  if (expectedPassphrase === KIT_NETWORKS.PUBLIC || configuredName === "PUBLIC" || configuredName === "PUBNET") {
+    return KIT_NETWORKS.PUBLIC;
   }
 
-  if (expectedPassphrase === KitNetworks.FUTURENET || configuredName === "FUTURENET") {
-    return KitNetworks.FUTURENET;
+  if (expectedPassphrase === KIT_NETWORKS.FUTURENET || configuredName === "FUTURENET") {
+    return KIT_NETWORKS.FUTURENET;
   }
 
-  if (expectedPassphrase === KitNetworks.SANDBOX || configuredName === "SANDBOX") {
-    return KitNetworks.SANDBOX;
+  if (expectedPassphrase === KIT_NETWORKS.SANDBOX || configuredName === "SANDBOX") {
+    return KIT_NETWORKS.SANDBOX;
   }
 
-  if (expectedPassphrase === KitNetworks.STANDALONE || configuredName === "STANDALONE") {
-    return KitNetworks.STANDALONE;
+  if (expectedPassphrase === KIT_NETWORKS.STANDALONE || configuredName === "STANDALONE") {
+    return KIT_NETWORKS.STANDALONE;
   }
 
-  return KitNetworks.TESTNET;
+  return KIT_NETWORKS.TESTNET;
 }
 
 function normalizeErrorMessage(error: unknown, fallback: string) {
@@ -103,6 +133,47 @@ function normalizeErrorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
+function normalizeWalletError(error: unknown, context: WalletErrorContext, fallback: string) {
+  const message = normalizeErrorMessage(error, fallback);
+  const normalized = message.toLowerCase();
+
+  if (
+    normalized.includes("user closed the modal") ||
+    normalized.includes("rejected") ||
+    normalized.includes("denied") ||
+    normalized.includes("cancelled") ||
+    normalized.includes("canceled")
+  ) {
+    if (context === "sign") {
+      return "The signature request was canceled in the wallet.";
+    }
+
+    return "The wallet connection request was canceled.";
+  }
+
+  if (
+    normalized.includes("no wallet has been connected") ||
+    normalized.includes("needs to authenticate first") ||
+    normalized.includes("set the wallet first")
+  ) {
+    return "Connect a wallet before continuing.";
+  }
+
+  if (
+    normalized.includes("not available") ||
+    normalized.includes("not installed") ||
+    normalized.includes("install")
+  ) {
+    return "The selected wallet is not available in this browser. Install or open a supported wallet and try again.";
+  }
+
+  if (context === "network" && normalized.includes("network")) {
+    return "The wallet is connected, but the active network details could not be read.";
+  }
+
+  return message;
+}
+
 function normalizeAddress(address: string) {
   const trimmedAddress = address.trim();
 
@@ -113,7 +184,9 @@ function normalizeAddress(address: string) {
   return trimmedAddress;
 }
 
-function readSelectedWalletMeta() {
+async function readSelectedWalletMeta() {
+  const { StellarWalletsKit } = await loadWalletKitRuntime();
+
   try {
     const selectedModule = StellarWalletsKit.selectedModule;
     return {
@@ -140,22 +213,33 @@ function normalizeNetworkName(network: string | null, networkPassphrase: string 
   return null;
 }
 
-export function ensureWalletKitInitialized() {
+export async function ensureWalletKitInitialized() {
   if (walletKitInitialized || typeof window === "undefined") {
     return;
   }
 
-  StellarWalletsKit.init({
-    modules: defaultModules(),
-    network: getKitNetwork(),
-    theme: kitTheme,
-    authModal: {
-      showInstallLabel: true,
-      hideUnsupportedWallets: false,
-    },
-  });
+  if (!walletKitInitializationPromise) {
+    walletKitInitializationPromise = (async () => {
+      const { StellarWalletsKit, defaultModules } = await loadWalletKitRuntime();
 
-  walletKitInitialized = true;
+      StellarWalletsKit.init({
+        modules: defaultModules(),
+        network: getKitNetwork() as Networks,
+        theme: kitTheme,
+        authModal: {
+          showInstallLabel: true,
+          hideUnsupportedWallets: false,
+        },
+      });
+
+      walletKitInitialized = true;
+    })().catch((error) => {
+      walletKitInitializationPromise = null;
+      throw error;
+    });
+  }
+
+  await walletKitInitializationPromise;
 }
 
 export async function fetchXlmBalance(address: string): Promise<string> {
@@ -166,9 +250,11 @@ export async function fetchXlmBalance(address: string): Promise<string> {
 }
 
 export async function readWalletSnapshot(): Promise<WalletSnapshot> {
-  ensureWalletKitInitialized();
+  await ensureWalletKitInitialized();
 
-  const walletMeta = readSelectedWalletMeta();
+  const { StellarWalletsKit } = await loadWalletKitRuntime();
+
+  const walletMeta = await readSelectedWalletMeta();
 
   let address: string;
   try {
@@ -187,7 +273,7 @@ export async function readWalletSnapshot(): Promise<WalletSnapshot> {
     networkName = network.network ?? null;
     networkPassphrase = network.networkPassphrase ?? null;
   } catch (error) {
-    networkError = normalizeErrorMessage(error, "Unable to read the active wallet network.");
+    networkError = normalizeWalletError(error, "network", "Unable to read the active wallet network.");
   }
 
   const normalizedPassphrase = networkPassphrase ?? getExpectedNetworkPassphrase();
@@ -213,41 +299,61 @@ export async function readWalletSnapshot(): Promise<WalletSnapshot> {
 }
 
 export async function connectWalletWithKit() {
-  ensureWalletKitInitialized();
+  await ensureWalletKitInitialized();
 
-  const response = await StellarWalletsKit.authModal();
-  normalizeAddress(response.address);
+  const { StellarWalletsKit } = await loadWalletKitRuntime();
 
-  return readWalletSnapshot();
+  try {
+    const response = await StellarWalletsKit.authModal();
+    normalizeAddress(response.address);
+    return readWalletSnapshot();
+  } catch (error) {
+    throw new Error(
+      normalizeWalletError(error, "connect", "Unable to connect the selected wallet."),
+    );
+  }
 }
 
 export async function disconnectActiveWallet() {
-  ensureWalletKitInitialized();
+  await ensureWalletKitInitialized();
+
+  const { StellarWalletsKit } = await loadWalletKitRuntime();
   await StellarWalletsKit.disconnect();
 }
 
 export async function signWithActiveWallet(transactionXdr: string, address: string) {
-  ensureWalletKitInitialized();
+  await ensureWalletKitInitialized();
+
+  const { StellarWalletsKit } = await loadWalletKitRuntime();
 
   const normalizedAddress = normalizeAddress(address);
-  const result = await StellarWalletsKit.signTransaction(transactionXdr, {
-    networkPassphrase: getExpectedNetworkPassphrase(),
-    address: normalizedAddress,
-  });
 
-  if (!result.signedTxXdr) {
-    throw new Error("The selected wallet did not return a signed transaction.");
+  try {
+    const result = await StellarWalletsKit.signTransaction(transactionXdr, {
+      networkPassphrase: getExpectedNetworkPassphrase(),
+      address: normalizedAddress,
+    });
+
+    if (!result.signedTxXdr) {
+      throw new Error("The selected wallet did not return a signed transaction.");
+    }
+
+    if (result.signerAddress && result.signerAddress !== normalizedAddress) {
+      throw new Error("The selected wallet signed with a different address than the connected account.");
+    }
+
+    return result.signedTxXdr;
+  } catch (error) {
+    throw new Error(
+      normalizeWalletError(error, "sign", "The transaction could not be signed by the selected wallet."),
+    );
   }
-
-  if (result.signerAddress && result.signerAddress !== normalizedAddress) {
-    throw new Error("The selected wallet signed with a different address than the connected account.");
-  }
-
-  return result.signedTxXdr;
 }
 
-export function subscribeWalletKitEvents(subscriptions: WalletKitEventSubscriptions) {
-  ensureWalletKitInitialized();
+export async function subscribeWalletKitEvents(subscriptions: WalletKitEventSubscriptions) {
+  await ensureWalletKitInitialized();
+
+  const { StellarWalletsKit, KitEventType } = await loadWalletKitRuntime();
 
   const unsubscribe = [
     subscriptions.onStateUpdated
@@ -268,15 +374,3 @@ export function subscribeWalletKitEvents(subscriptions: WalletKitEventSubscripti
   };
 }
 
-export async function mountWalletKitButton(
-  container: HTMLElement,
-  props: SwkButtonProps = {
-    mode: ButtonMode.free,
-    size: ButtonSize.md,
-    classes: "primary-button navbar-btn swk-navbar-button",
-  },
-) {
-  ensureWalletKitInitialized();
-  container.replaceChildren();
-  await StellarWalletsKit.createButton(container, props);
-}

@@ -246,6 +246,10 @@ a {
   border-color: rgba(199, 91, 79, 0.35);
 }
 
+.global-wallet-notice {
+  margin-bottom: 22px;
+}
+
 .card-head h2,
 .feedback-card h2,
 .notice-card h2 {
@@ -342,27 +346,231 @@ a {
   gap: 12px;
 }
 
-.navbar-wallet {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.88rem;
-  font-weight: 600;
-  color: var(--muted);
+/* ── Wallet Button ─────────────────────────────────────── */
+
+.wb-root {
+  position: relative;
 }
 
-.navbar-balance {
-  font-size: 0.88rem;
+/* Connect button */
+.wb-connect-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  background: linear-gradient(135deg, #136f68 0%, #0c4f4a 100%);
+  color: #fff;
+  box-shadow:
+    0 2px 12px rgba(15, 118, 110, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  position: relative;
+  overflow: hidden;
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    opacity 160ms ease;
+}
+
+.wb-connect-btn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+.wb-connect-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow:
+    0 4px 20px rgba(15, 118, 110, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
+.wb-connect-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.wb-connect-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+/* Spinner */
+.wb-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: wb-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes wb-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Connected account pill */
+.wb-account-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px 5px 5px;
+  border-radius: 999px;
+  border: 1px solid rgba(23, 37, 31, 0.10);
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--ink);
+  transition:
+    background 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease,
+    border-color 160ms ease;
+}
+
+.wb-account-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.09),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  transform: translateY(-1px);
+  border-color: rgba(15, 118, 110, 0.18);
+}
+
+.wb-account-btn--open {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(15, 118, 110, 0.22);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.09),
+    0 0 0 3px rgba(15, 118, 110, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.wb-account-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+/* Avatar circle */
+.wb-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #136f68 0%, #0c4f4a 100%);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 1px 4px rgba(15, 118, 110, 0.28);
+  user-select: none;
+}
+
+/* Balance & address inline in pill */
+.wb-balance {
+  font-size: 0.8rem;
   font-weight: 700;
   color: var(--accent);
-  padding: 3px 10px;
+  padding: 2px 8px;
   border-radius: 999px;
   background: var(--accent-soft);
 }
 
-.navbar-badge {
+.wb-address {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* Animated chevron */
+.wb-chevron {
+  color: var(--muted);
+  transition: transform 200ms ease;
+  flex-shrink: 0;
+}
+
+.wb-chevron--up {
+  transform: rotate(180deg);
+}
+
+/* Dropdown panel */
+.wb-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 268px;
+  padding: 14px;
+  border-radius: 20px;
+  background: rgba(253, 250, 245, 0.97);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.12),
+    0 2px 8px rgba(0, 0, 0, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  z-index: 200;
+  animation: wb-dropdown-in 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes wb-dropdown-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.wb-dropdown-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.wb-dropdown-header .wb-avatar {
+  width: 36px;
+  height: 36px;
+  font-size: 0.9rem;
+}
+
+.wb-dropdown-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wb-dropdown-wallet-name {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--ink);
+}
+
+/* Network badge (used inside dropdown and optionally elsewhere) */
+.wb-network-badge {
   display: inline-block;
-  padding: 3px 10px;
+  padding: 2px 8px;
   border-radius: 999px;
   font-size: 0.7rem;
   font-weight: 700;
@@ -370,32 +578,100 @@ a {
   letter-spacing: 0.06em;
   background: var(--accent-soft);
   color: var(--accent);
+  align-self: flex-start;
 }
 
-.navbar-badge.warning {
-  background: rgba(209, 154, 42, 0.2);
+.wb-network-badge--warn {
+  background: rgba(209, 154, 42, 0.18);
   color: var(--gold);
 }
 
-.navbar-btn {
-  padding: 10px 16px;
-  font-size: 0.88rem;
+.wb-dropdown-divider {
+  height: 1px;
+  background: rgba(23, 37, 31, 0.08);
+  margin: 10px 0;
 }
 
-.wallet-kit-button-slot {
+.wb-dropdown-row {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  min-height: 40px;
+  gap: 8px;
+  padding: 3px 0;
 }
 
-.swk-navbar-button {
+.wb-dropdown-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  flex-shrink: 0;
+}
+
+.wb-dropdown-value {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* Copy address button */
+.wb-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--muted);
+  font-family: monospace;
+  padding: 2px 6px;
+  border-radius: 6px;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
+  max-width: 168px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.navbar-wallet-error {
-  font-size: 0.88rem;
-  font-weight: 600;
+.wb-copy-btn:hover {
+  background: rgba(15, 118, 110, 0.08);
+  color: var(--accent);
+}
+
+/* Disconnect button */
+.wb-disconnect-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(199, 91, 79, 0.12);
+  background: rgba(199, 91, 79, 0.06);
   color: var(--rose);
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+  font-family: inherit;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease;
+  margin-top: 4px;
+}
+
+.wb-disconnect-btn:hover:not(:disabled) {
+  background: rgba(199, 91, 79, 0.12);
+  border-color: rgba(199, 91, 79, 0.22);
+}
+
+.wb-disconnect-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 /* ── Search ────────────────────────────────────────────── */
