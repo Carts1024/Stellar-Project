@@ -89,6 +89,12 @@ export default function PoolPage() {
         poolId,
         withdrawRecipient.trim(),
         amount,
+        () =>
+          setFeedback({
+            state: "submitting",
+            title: "Transaction broadcast",
+            detail: "Waiting for on-chain confirmation...",
+          }),
       );
 
       setFeedback({

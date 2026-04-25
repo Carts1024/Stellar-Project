@@ -47,6 +47,12 @@ export function CreateGroupModal({ open, onClose, onCreated }: Props) {
         wallet.address,
         requireText(groupName, "Group name"),
         assetAddress.trim(),
+        () =>
+          setFeedback({
+            state: "submitting",
+            title: "Transaction broadcast",
+            detail: "Waiting for on-chain confirmation...",
+          }),
       );
 
       setFeedback({

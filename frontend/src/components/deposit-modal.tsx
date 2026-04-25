@@ -43,7 +43,18 @@ export function DepositModal({ open, onClose, onDeposited, groupId, poolId }: Pr
 
     try {
       const parsed = parseAmountToInt(amount, appConfig.assetDecimals);
-      const result = await depositToPool(wallet.address, groupId, poolId, parsed);
+      const result = await depositToPool(
+        wallet.address,
+        groupId,
+        poolId,
+        parsed,
+        () =>
+          setFeedback({
+            state: "submitting",
+            title: "Transaction broadcast",
+            detail: "Waiting for on-chain confirmation...",
+          }),
+      );
 
       setFeedback({
         state: "success",

@@ -41,7 +41,17 @@ export function AddMemberModal({ open, onClose, onAdded, groupId }: Props) {
     });
 
     try {
-      const result = await addGroupMember(wallet.address, groupId, memberAddress.trim());
+      const result = await addGroupMember(
+        wallet.address,
+        groupId,
+        memberAddress.trim(),
+        () =>
+          setFeedback({
+            state: "submitting",
+            title: "Transaction broadcast",
+            detail: "Waiting for on-chain confirmation...",
+          }),
+      );
       setFeedback({
         state: "success",
         title: "Member added",

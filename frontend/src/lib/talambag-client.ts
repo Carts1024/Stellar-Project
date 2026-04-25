@@ -119,6 +119,7 @@ async function signAndSubmit<T>(
   method: string,
   args: ReturnType<typeof buildArgs>,
   transformReturn?: (value: unknown) => T,
+  onSubmitting?: () => void,
 ) {
   ensureConfigured();
   const server = getServer();
@@ -129,6 +130,7 @@ async function signAndSubmit<T>(
     signedXdr,
     getExpectedNetworkPassphrase(),
   );
+  onSubmitting?.();
   const sendResponse = await server.sendTransaction(signedTransaction);
 
   if (sendResponse.status !== "PENDING") {
@@ -347,7 +349,12 @@ export async function getContractSnapshot(
   }
 }
 
-export async function createGroup(owner: string, name: string, assetAddress: string) {
+export async function createGroup(
+  owner: string,
+  name: string,
+  assetAddress: string,
+  onSubmitting?: () => void,
+) {
   const response = await signAndSubmit(
     owner,
     "create_group",
@@ -357,6 +364,7 @@ export async function createGroup(owner: string, name: string, assetAddress: str
       { value: assetAddress, type: "address" },
     ]),
     normalizeNumber,
+    onSubmitting,
   );
 
   return {
@@ -365,7 +373,12 @@ export async function createGroup(owner: string, name: string, assetAddress: str
   };
 }
 
-export async function addGroupMember(owner: string, groupId: number, member: string) {
+export async function addGroupMember(
+  owner: string,
+  groupId: number,
+  member: string,
+  onSubmitting?: () => void,
+) {
   return signAndSubmit(
     owner,
     "add_member",
@@ -374,10 +387,17 @@ export async function addGroupMember(owner: string, groupId: number, member: str
       { value: groupId, type: "u32" },
       { value: member, type: "address" },
     ]),
+    undefined,
+    onSubmitting,
   );
 }
 
-export async function createPool(creator: string, groupId: number, name: string) {
+export async function createPool(
+  creator: string,
+  groupId: number,
+  name: string,
+  onSubmitting?: () => void,
+) {
   const response = await signAndSubmit(
     creator,
     "create_pool",
@@ -387,6 +407,7 @@ export async function createPool(creator: string, groupId: number, name: string)
       { value: name, type: "string" },
     ]),
     normalizeNumber,
+    onSubmitting,
   );
 
   return {
@@ -395,7 +416,13 @@ export async function createPool(creator: string, groupId: number, name: string)
   };
 }
 
-export async function depositToPool(from: string, groupId: number, poolId: number, amount: bigint) {
+export async function depositToPool(
+  from: string,
+  groupId: number,
+  poolId: number,
+  amount: bigint,
+  onSubmitting?: () => void,
+) {
   return signAndSubmit(
     from,
     "deposit",
@@ -405,6 +432,8 @@ export async function depositToPool(from: string, groupId: number, poolId: numbe
       { value: poolId, type: "u32" },
       { value: amount, type: "i128" },
     ]),
+    undefined,
+    onSubmitting,
   );
 }
 
@@ -414,6 +443,7 @@ export async function withdrawFromPool(
   poolId: number,
   to: string,
   amount: bigint,
+  onSubmitting?: () => void,
 ) {
   return signAndSubmit(
     organizer,
@@ -425,6 +455,8 @@ export async function withdrawFromPool(
       { value: to, type: "address" },
       { value: amount, type: "i128" },
     ]),
+    undefined,
+    onSubmitting,
   );
 }
 

@@ -44,6 +44,12 @@ export function CreatePoolModal({ open, onClose, onCreated, groupId }: Props) {
         wallet.address,
         groupId,
         requireText(poolName, "Pool name"),
+        () =>
+          setFeedback({
+            state: "submitting",
+            title: "Transaction broadcast",
+            detail: "Waiting for on-chain confirmation...",
+          }),
       );
 
       setFeedback({
