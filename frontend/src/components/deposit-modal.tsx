@@ -46,7 +46,7 @@ export function DepositModal({
     setFeedback({
       state: "signing",
       title: "Awaiting contribution signature",
-      detail: "Freighter will ask you to approve the deposit.",
+      detail: "Your selected wallet will ask you to approve the deposit.",
     });
 
     try {

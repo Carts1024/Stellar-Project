@@ -78,7 +78,7 @@ export default function PoolPage() {
     setFeedback({
       state: "signing",
       title: "Awaiting organizer signature",
-      detail: "Freighter will confirm the pool withdrawal.",
+      detail: "Your selected wallet will confirm the pool withdrawal.",
     });
 
     try {

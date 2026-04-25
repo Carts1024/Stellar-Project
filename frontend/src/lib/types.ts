@@ -48,6 +48,8 @@ export type ContractSnapshot = {
 export type WalletSnapshot = {
   status: WalletStatus;
   address: string | null;
+  walletId: string | null;
+  walletName: string | null;
   network: string | null;
   networkPassphrase: string | null;
   isExpectedNetwork: boolean;

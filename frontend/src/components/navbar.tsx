@@ -2,19 +2,12 @@
 
 import Link from "next/link";
 import { useWallet } from "@/contexts/wallet-context";
+import { WalletKitButton } from "@/components/wallet-kit-button";
 import { appConfig } from "@/lib/config";
 import { formatXlmBalance, shortenAddress } from "@/lib/format";
 
 export function Navbar() {
-  const { wallet, connectWallet, disconnectWallet } = useWallet();
-
-  async function handleConnect() {
-    try {
-      await connectWallet();
-    } catch {
-      // silently handled — wallet state will reflect the error
-    }
-  }
+  const { wallet } = useWallet();
 
   return (
     <nav className="navbar">
@@ -24,7 +17,7 @@ export function Navbar() {
 
       <div className="navbar-actions">
         {wallet.status === "connected" && wallet.address ? (
-          <>
+          <div className="navbar-wallet-group">
             <span className="navbar-wallet">
               {wallet.xlmBalance !== null && (
                 <span className="navbar-balance">
@@ -32,25 +25,23 @@ export function Navbar() {
                 </span>
               )}
               {shortenAddress(wallet.address)}
+              {wallet.walletName ? <span className="navbar-badge">{wallet.walletName}</span> : null}
               {!wallet.isExpectedNetwork ? (
                 <span className="navbar-badge warning">Wrong network</span>
               ) : (
                 <span className="navbar-badge">{appConfig.network}</span>
               )}
             </span>
-            <button className="ghost-button navbar-btn" onClick={disconnectWallet}>
-              Disconnect
-            </button>
+            <WalletKitButton />
+          </div>
+        ) : wallet.status === "unsupported" && wallet.error ? (
+          <>
+            <span className="navbar-wallet-error" title={wallet.error}>
+              Wallet unavailable
+            </span>
+            <WalletKitButton />
           </>
-        ) : (
-          <button
-            className="primary-button navbar-btn"
-            onClick={() => void handleConnect()}
-            disabled={wallet.status === "connecting"}
-          >
-            {wallet.status === "connecting" ? "Connecting..." : "Connect Freighter"}
-          </button>
-        )}
+        ) : <WalletKitButton />}
       </div>
     </nav>
   );

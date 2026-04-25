@@ -38,7 +38,7 @@ export function AddMemberModal({ open, onClose, onAdded, groupId, onSuccessFeedb
     setFeedback({
       state: "signing",
       title: "Awaiting member approval",
-      detail: "Freighter will confirm the membership update.",
+      detail: "Your selected wallet will confirm the membership update.",
     });
 
     try {

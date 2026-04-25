@@ -40,7 +40,7 @@ export function CreateGroupModal({ open, onClose, onCreated, onSuccessFeedback }
     setFeedback({
       state: "signing",
       title: "Awaiting group creation signature",
-      detail: "Freighter will ask you to approve the new group transaction.",
+      detail: "Your selected wallet will ask you to approve the new group transaction.",
     });
 
     try {

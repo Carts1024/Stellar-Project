@@ -11,7 +11,7 @@ import {
   xdr,
 } from "@stellar/stellar-sdk";
 import { appConfig, getExpectedNetworkPassphrase, hasRequiredConfig } from "@/lib/config";
-import { signWithFreighter } from "@/lib/freighter";
+import { signWithActiveWallet } from "@/lib/wallet-kit";
 import type { ContractSnapshot, GroupSummary, PoolEvent, PoolSummary } from "@/lib/types";
 
 type ContractArg = {
@@ -125,7 +125,7 @@ async function signAndSubmit<T>(
   const server = getServer();
   const transaction = await buildTransaction(sourceAddress, method, args);
   const preparedTransaction = await server.prepareTransaction(transaction);
-  const signedXdr = await signWithFreighter(preparedTransaction.toXDR(), sourceAddress);
+  const signedXdr = await signWithActiveWallet(preparedTransaction.toXDR(), sourceAddress);
   const signedTransaction = TransactionBuilder.fromXDR(
     signedXdr,
     getExpectedNetworkPassphrase(),

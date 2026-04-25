@@ -336,6 +336,12 @@ a {
   gap: 12px;
 }
 
+.navbar-wallet-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .navbar-wallet {
   display: flex;
   align-items: center;
@@ -374,6 +380,22 @@ a {
 .navbar-btn {
   padding: 10px 16px;
   font-size: 0.88rem;
+}
+
+.wallet-kit-button-slot {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+}
+
+.swk-navbar-button {
+  white-space: nowrap;
+}
+
+.navbar-wallet-error {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--rose);
 }
 
 /* ── Search ────────────────────────────────────────────── */
