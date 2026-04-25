@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useWallet } from "@/contexts/wallet-context";
+import { FeedbackBanner } from "@/components/feedback-banner";
 import { SearchBar } from "@/components/search-bar";
 import { CreateGroupModal } from "@/components/create-group-modal";
 import { formatXlmBalance, shortenAddress } from "@/lib/format";
 import { listGroups, readGroupCount } from "@/lib/talambag-client";
-import type { GroupSummary } from "@/lib/types";
+import type { GroupSummary, TxFeedback } from "@/lib/types";
 
 export default function DashboardPage() {
   const { wallet } = useWallet();
@@ -16,6 +17,7 @@ export default function DashboardPage() {
   const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [feedback, setFeedback] = useState<TxFeedback>({ state: "idle", title: "" });
 
   const loadGroups = useCallback(async () => {
     setIsLoading(true);
@@ -110,6 +112,8 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        <FeedbackBanner feedback={feedback} />
+
         <SearchBar
           value={search}
           onChange={setSearch}
@@ -148,6 +152,7 @@ export default function DashboardPage() {
         open={showCreateModal}
         onClose={() => setShowCreateModal(false)}
         onCreated={() => void loadGroups()}
+        onSuccessFeedback={setFeedback}
       />
     </>
   );

@@ -13,9 +13,10 @@ type Props = {
   onClose: () => void;
   onAdded: () => void;
   groupId: number;
+  onSuccessFeedback: (feedback: TxFeedback) => void;
 };
 
-export function AddMemberModal({ open, onClose, onAdded, groupId }: Props) {
+export function AddMemberModal({ open, onClose, onAdded, groupId, onSuccessFeedback }: Props) {
   const { wallet } = useWallet();
   const [memberAddress, setMemberAddress] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -52,15 +53,17 @@ export function AddMemberModal({ open, onClose, onAdded, groupId }: Props) {
             detail: "Waiting for on-chain confirmation...",
           }),
       );
-      setFeedback({
+      const successFeedback: TxFeedback = {
         state: "success",
         title: "Member added",
         detail: "The wallet can now create pools and contribute.",
         hash: result.hash,
-      });
+      };
+      setFeedback(successFeedback);
+      onSuccessFeedback(successFeedback);
       setMemberAddress("");
       onAdded();
-      setTimeout(onClose, 1500);
+      handleClose();
     } catch (error) {
       setFeedback({
         state: "error",
