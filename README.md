@@ -16,6 +16,14 @@ Talambag Wallet Connected
 Talambag Wallet Disconnected
 ![Talambag Wallet Disconnected](frontend/public/screenshots/wallet-disconnected.png)
 
+### Wallet Options
+
+
+![Talambag Wallet Options](frontend/public/screenshots/wallets.png)
+
+
+![Talambag Wallet Options(cont.)](frontend/public/screenshots/wallets(cont).png)
+
 ### Dashboard Overview
 
 ![Talambag Dashboard](frontend/public/screenshots/dashboard-overview.png)
@@ -67,6 +75,10 @@ CD44KFLGE2ISRUD6Q5BZTX3NI4ILTD5QUIWIED255UJDRAFJSR7GYIJE
 ## Smart Contract Short Description
 This Soroban smart contract manages community groups and their contribution pools on-chain. It enforces membership and role-based permissions so only authorized users can add members, create pools, contribute, or withdraw funds. It also tracks each pool balance independently to keep funds and accounting transparent across multiple groups.
 
+## Transaction Hash of a Contract Call
+63a9457f00da89738e4394b2ddcbf3f1a39951ade3cd7ffafa7466d1e28c3c31
+
+https://stellar.expert/explorer/testnet/tx/63a9457f00da89738e4394b2ddcbf3f1a39951ade3cd7ffafa7466d1e28c3c31
 
 ## Future Scope
 
