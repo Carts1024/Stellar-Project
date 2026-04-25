@@ -7,6 +7,7 @@ import {
   requestAccess,
   signTransaction,
 } from "@stellar/freighter-api";
+import { Horizon } from "@stellar/stellar-sdk";
 import { getExpectedNetworkPassphrase, appConfig } from "@/lib/config";
 import type { WalletSnapshot } from "@/lib/types";
 
@@ -17,8 +18,16 @@ function buildUnsupportedWallet(error?: string): WalletSnapshot {
     network: null,
     networkPassphrase: null,
     isExpectedNetwork: false,
+    xlmBalance: null,
     error: error ?? "Freighter is not available in this browser.",
   };
+}
+
+export async function fetchXlmBalance(address: string): Promise<string> {
+  const server = new Horizon.Server(appConfig.horizonUrl);
+  const account = await server.loadAccount(address);
+  const native = account.balances.find((b) => b.asset_type === "native");
+  return native?.balance ?? "0";
 }
 
 export async function readFreighterWallet(): Promise<WalletSnapshot> {
@@ -35,6 +44,7 @@ export async function readFreighterWallet(): Promise<WalletSnapshot> {
       network: null,
       networkPassphrase: null,
       isExpectedNetwork: false,
+      xlmBalance: null,
     };
   }
 
@@ -50,6 +60,7 @@ export async function readFreighterWallet(): Promise<WalletSnapshot> {
       network: null,
       networkPassphrase: null,
       isExpectedNetwork: false,
+      xlmBalance: null,
       error: addressResponse.error,
     };
   }
@@ -61,6 +72,7 @@ export async function readFreighterWallet(): Promise<WalletSnapshot> {
       network: null,
       networkPassphrase: null,
       isExpectedNetwork: false,
+      xlmBalance: null,
       error: networkResponse.error,
     };
   }
@@ -71,12 +83,22 @@ export async function readFreighterWallet(): Promise<WalletSnapshot> {
     networkPassphrase === getExpectedNetworkPassphrase() ||
     networkResponse.network === appConfig.network;
 
+  let xlmBalance: string | null = null;
+  if (addressResponse.address) {
+    try {
+      xlmBalance = await fetchXlmBalance(addressResponse.address);
+    } catch {
+      // Non-fatal: wallet state is valid even if balance fetch fails
+    }
+  }
+
   return {
     status: addressResponse.address ? "connected" : "disconnected",
     address: addressResponse.address || null,
     network: networkResponse.network ?? null,
     networkPassphrase,
     isExpectedNetwork,
+    xlmBalance,
   };
 }
 

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useWallet } from "@/contexts/wallet-context";
 import { SearchBar } from "@/components/search-bar";
 import { CreateGroupModal } from "@/components/create-group-modal";
-import { shortenAddress } from "@/lib/format";
+import { formatXlmBalance, shortenAddress } from "@/lib/format";
 import { listGroups, readGroupCount } from "@/lib/talambag-client";
 import type { GroupSummary } from "@/lib/types";
 
@@ -65,9 +65,17 @@ export default function DashboardPage() {
         </article>
         <article className="metric-card">
           <span className="metric-label">Connected wallet</span>
-          <strong className="metric-value address">{shortenAddress(wallet.address)}</strong>
+          <strong className="metric-value address">
+            {wallet.xlmBalance !== null
+              ? `${formatXlmBalance(wallet.xlmBalance)} XLM`
+              : shortenAddress(wallet.address)}
+          </strong>
           <span className="metric-detail">
-            {wallet.network ? `${wallet.network} via Freighter` : "Not connected"}
+            {wallet.xlmBalance !== null
+              ? shortenAddress(wallet.address)
+              : wallet.network
+                ? `${wallet.network} via Freighter`
+                : "Not connected"}
           </span>
         </article>
         <article className="metric-card">

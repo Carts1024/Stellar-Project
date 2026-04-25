@@ -10,6 +10,7 @@ const initialWalletState: WalletSnapshot = {
   network: null,
   networkPassphrase: null,
   isExpectedNetwork: false,
+  xlmBalance: null,
 };
 
 export function useFreighterWallet() {
@@ -30,6 +31,7 @@ export function useFreighterWallet() {
         network: null,
         networkPassphrase: null,
         isExpectedNetwork: false,
+        xlmBalance: null,
         error: message,
       };
 

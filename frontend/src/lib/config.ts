@@ -8,6 +8,8 @@ const configuredPassphrase =
 export const appConfig = {
   rpcUrl:
     process.env.NEXT_PUBLIC_STELLAR_RPC_URL ?? "https://soroban-testnet.stellar.org",
+  horizonUrl:
+    process.env.NEXT_PUBLIC_STELLAR_HORIZON_URL ?? "https://horizon-testnet.stellar.org",
   network: process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? "TESTNET",
   networkPassphrase: configuredPassphrase,
   contractId: process.env.NEXT_PUBLIC_TALAMBAG_CONTRACT_ID ?? "",

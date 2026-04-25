@@ -60,3 +60,9 @@ export function shortenAddress(address: string | null, size = 6) {
 
   return `${address.slice(0, size)}...${address.slice(-size)}`;
 }
+
+// Horizon returns balances as "125.5000000"; strip trailing zeros for display.
+export function formatXlmBalance(balance: string): string {
+  if (!balance.includes(".")) return balance;
+  return balance.replace(/0+$/, "").replace(/\.$/, "") || "0";
+}

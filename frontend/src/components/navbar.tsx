@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useWallet } from "@/contexts/wallet-context";
 import { appConfig } from "@/lib/config";
-import { shortenAddress } from "@/lib/format";
+import { formatXlmBalance, shortenAddress } from "@/lib/format";
 
 export function Navbar() {
   const { wallet, connectWallet, disconnectWallet } = useWallet();
@@ -26,6 +26,11 @@ export function Navbar() {
         {wallet.status === "connected" && wallet.address ? (
           <>
             <span className="navbar-wallet">
+              {wallet.xlmBalance !== null && (
+                <span className="navbar-balance">
+                  {formatXlmBalance(wallet.xlmBalance)} XLM
+                </span>
+              )}
               {shortenAddress(wallet.address)}
               {!wallet.isExpectedNetwork ? (
                 <span className="navbar-badge warning">Wrong network</span>

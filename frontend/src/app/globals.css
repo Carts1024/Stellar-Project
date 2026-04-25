@@ -345,6 +345,15 @@ a {
   color: var(--muted);
 }
 
+.navbar-balance {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--accent);
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+}
+
 .navbar-badge {
   display: inline-block;
   padding: 3px 10px;
