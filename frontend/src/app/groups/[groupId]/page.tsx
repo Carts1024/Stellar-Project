@@ -176,6 +176,7 @@ export default function GroupPage() {
         onClose={() => setShowAddMember(false)}
         onAdded={() => void loadGroup()}
         groupId={groupId}
+        onSuccessFeedback={setFeedback}
       />
 
       <CreatePoolModal
@@ -183,6 +184,7 @@ export default function GroupPage() {
         onClose={() => setShowCreatePool(false)}
         onCreated={() => void loadGroup()}
         groupId={groupId}
+        onSuccessFeedback={setFeedback}
       />
     </>
   );

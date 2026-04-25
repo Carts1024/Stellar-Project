@@ -13,9 +13,10 @@ type Props = {
   open: boolean;
   onClose: () => void;
   onCreated: () => void;
+  onSuccessFeedback: (feedback: TxFeedback) => void;
 };
 
-export function CreateGroupModal({ open, onClose, onCreated }: Props) {
+export function CreateGroupModal({ open, onClose, onCreated, onSuccessFeedback }: Props) {
   const { wallet } = useWallet();
   const [groupName, setGroupName] = useState("");
   const [assetAddress, setAssetAddress] = useState(appConfig.assetAddress);
@@ -55,18 +56,21 @@ export function CreateGroupModal({ open, onClose, onCreated }: Props) {
           }),
       );
 
-      setFeedback({
+      const successFeedback: TxFeedback = {
         state: "success",
         title: "Group created",
         detail: result.groupId !== null
           ? `Group #${result.groupId} is ready for members and pools.`
           : "The group was created successfully.",
         hash: result.hash,
-      });
+      };
+
+      setFeedback(successFeedback);
+      onSuccessFeedback(successFeedback);
 
       setGroupName("");
       onCreated();
-      setTimeout(onClose, 1500);
+      handleClose();
     } catch (error) {
       setFeedback({
         state: "error",

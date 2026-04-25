@@ -15,9 +15,17 @@ type Props = {
   onDeposited: () => void;
   groupId: number;
   poolId: number;
+  onSuccessFeedback: (feedback: TxFeedback) => void;
 };
 
-export function DepositModal({ open, onClose, onDeposited, groupId, poolId }: Props) {
+export function DepositModal({
+  open,
+  onClose,
+  onDeposited,
+  groupId,
+  poolId,
+  onSuccessFeedback,
+}: Props) {
   const { wallet } = useWallet();
   const [amount, setAmount] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -56,16 +64,19 @@ export function DepositModal({ open, onClose, onDeposited, groupId, poolId }: Pr
           }),
       );
 
-      setFeedback({
+      const successFeedback: TxFeedback = {
         state: "success",
         title: "Contribution received",
         detail: `${appConfig.assetCode} has been deposited into the pool.`,
         hash: result.hash,
-      });
+      };
+
+      setFeedback(successFeedback);
+      onSuccessFeedback(successFeedback);
 
       setAmount("");
       onDeposited();
-      setTimeout(onClose, 1500);
+      handleClose();
     } catch (error) {
       setFeedback({
         state: "error",

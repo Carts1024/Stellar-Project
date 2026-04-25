@@ -334,6 +334,7 @@ export default function PoolPage() {
         onDeposited={() => void loadPool()}
         groupId={groupId}
         poolId={poolId}
+        onSuccessFeedback={setFeedback}
       />
     </>
   );

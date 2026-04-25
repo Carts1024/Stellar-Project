@@ -13,9 +13,10 @@ type Props = {
   onClose: () => void;
   onCreated: (poolId: number | null) => void;
   groupId: number;
+  onSuccessFeedback: (feedback: TxFeedback) => void;
 };
 
-export function CreatePoolModal({ open, onClose, onCreated, groupId }: Props) {
+export function CreatePoolModal({ open, onClose, onCreated, groupId, onSuccessFeedback }: Props) {
   const { wallet } = useWallet();
   const [poolName, setPoolName] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -52,18 +53,21 @@ export function CreatePoolModal({ open, onClose, onCreated, groupId }: Props) {
           }),
       );
 
-      setFeedback({
+      const successFeedback: TxFeedback = {
         state: "success",
         title: "Pool created",
         detail: result.poolId !== null
           ? `Pool #${result.poolId} is ready for contributions.`
           : "The pool was created successfully.",
         hash: result.hash,
-      });
+      };
+
+      setFeedback(successFeedback);
+      onSuccessFeedback(successFeedback);
 
       setPoolName("");
       onCreated(result.poolId ?? null);
-      setTimeout(onClose, 1500);
+      handleClose();
     } catch (error) {
       setFeedback({
         state: "error",
