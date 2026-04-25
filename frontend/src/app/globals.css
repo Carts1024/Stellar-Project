@@ -126,6 +126,8 @@ a {
   margin: 0;
   color: var(--muted);
   line-height: 1.6;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .hero-actions,
@@ -211,6 +213,8 @@ a {
 .metric-value.address {
   font-size: 1.1rem;
   line-height: 1.3;
+  overflow-wrap: break-word;
+  word-break: break-all;
 }
 
 .feedback-card,
@@ -222,7 +226,12 @@ a {
   display: flex;
   justify-content: space-between;
   gap: 16px;
-  align-items: center;
+  align-items: flex-start;
+}
+
+.feedback-card > div {
+  flex: 1;
+  min-width: 0;
 }
 
 .feedback-card.success {
@@ -255,6 +264,8 @@ a {
 .notice-card h2 {
   margin: 0 0 8px;
   font-size: 1.45rem;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .stack-form {
@@ -822,6 +833,8 @@ a {
   margin: 4px 0 0;
   color: var(--muted);
   line-height: 1.5;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 /* ── Back Link ─────────────────────────────────────────── */
