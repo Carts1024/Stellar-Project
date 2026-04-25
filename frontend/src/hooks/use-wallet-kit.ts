@@ -71,15 +71,21 @@ export function useWalletKit() {
       return snapshot;
     } catch (error) {
       const message = normalizeHookError(error, "Unable to connect the selected wallet.");
+      const isCancellation = /cancel|cancelled|canceled|rejected|denied|closed/i.test(message);
 
-      setWallet((current) => ({
-        ...initialWalletState,
-        walletId: current.walletId,
-        walletName: current.walletName,
-        error: message,
-      }));
+      // Cancellations are user-initiated — reset silently with no error state.
+      // Real failures surface the message so WalletStatusNotice can display it.
+      setWallet(
+        isCancellation
+          ? initialWalletState
+          : { ...initialWalletState, error: message },
+      );
 
-      throw new Error(message);
+      if (!isCancellation) {
+        throw new Error(message);
+      }
+
+      return initialWalletState;
     }
   }
 

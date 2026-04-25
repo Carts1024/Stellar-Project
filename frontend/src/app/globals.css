@@ -1045,3 +1045,24 @@ a {
     grid-template-columns: 1fr;
   }
 }
+
+/* ── SWK Auth Modal ────────────────────────────────────── */
+/*
+ * Target the stable `stellar-wallets-kit` class on the outer section.
+ * The direct `<section>` child is the modal panel (max-w-[22rem] Twind class).
+ * The direct `<div>` child is the backdrop overlay.
+ * !important is required to beat Twind's injected stylesheet.
+ */
+
+/* Wider, taller modal panel */
+.stellar-wallets-kit > section {
+  max-width: 26rem !important;
+  max-height: 500px !important;
+}
+
+/* Richer backdrop */
+.stellar-wallets-kit > div {
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+  background: rgba(0, 0, 0, 0.6) !important;
+}

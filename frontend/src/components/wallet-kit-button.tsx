@@ -135,6 +135,9 @@ export function WalletButton() {
     setIsBusy(true);
     try {
       await connectWallet();
+    } catch {
+      // connectWallet already wrote the error into wallet state.
+      // Swallow here to prevent an unhandled rejection.
     } finally {
       setIsBusy(false);
     }
