@@ -8,31 +8,60 @@ Instead of collecting money through opaque chat threads and manually tracking wh
 
 Add your app screenshots inside `frontend/public/screenshots/` and keep the filenames below to render images automatically in this README.
 
+### Wallet States
+
+Talambag Wallet Connected
+![Talambag Wallet Connected](frontend/public/screenshots/dashboard-overview.png)
+
+Talambag Wallet Disconnected
+![Talambag Wallet Disconnected](frontend/public/screenshots/wallet-disconnected.png)
+
 ### Dashboard Overview
 
 ![Talambag Dashboard](frontend/public/screenshots/dashboard-overview.png)
+
+### Group Page
+
+![ Group Page](frontend/public/screenshots/group-page.png)
 
 ### Create Group
 
 ![Create Group Form](frontend/public/screenshots/create-group.png)
 
-### Pool Actions (Deposit / Withdraw)
+### Add Member to Group
 
-![Pool Actions](frontend/public/screenshots/pool-actions.png)
+![Add Member to Group Form](frontend/public/screenshots/add-member.png)
 
-### Group and Pool Lookup
+### Pool Page
 
-![Group and Pool Lookup](frontend/public/screenshots/group-pool-lookup.png)
+![ Pool Page](frontend/public/screenshots/pool-page.png)
+
+### Pool Actions (Deposit)
+
+![Pool Actions](frontend/public/screenshots/add-deposit.png)
+
+### Pool Actions (Withdraw)
+
+![Pool Actions](frontend/public/screenshots/add-withdrawal.png)
+
+### Transaction Feedback to User
+
+![Transaction Feedback](frontend/public/screenshots/transaction-feedback.png)
+
+### Successful Testnet Transaction
+
+![Successful Testnet Transaction](frontend/public/screenshots/successful-transaction.png)
 
 ## Stellar Expert Link
 
-https://stellar.expert/explorer/testnet/contract/CCA7C47RNAE4W24FGZUNSK7EJKCZ5OKHSO3AYHMHQ4D6PC542DFKOXUL
+https://stellar.expert/explorer/testnet/contract/CD44KFLGE2ISRUD6Q5BZTX3NI4ILTD5QUIWIED255UJDRAFJSR7GYIJE
+
 
 ![Stellar Expert Contract ](frontend/public/screenshots/talambag-contract.png)
 
 ## Smart Contract Address
 
-CCA7C47RNAE4W24FGZUNSK7EJKCZ5OKHSO3AYHMHQ4D6PC542DFKOXUL
+CD44KFLGE2ISRUD6Q5BZTX3NI4ILTD5QUIWIED255UJDRAFJSR7GYIJE
 
 
 ## Smart Contract Short Description
