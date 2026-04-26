@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Modal } from "@/components/modal";
 import { FeedbackBanner } from "@/components/feedback-banner";
 import { useWallet } from "@/contexts/wallet-context";
-import { createPool } from "@/lib/talambag-client";
+import { TxError, createPool } from "@/lib/talambag-client";
 import { requireText } from "@/lib/validators";
 import type { TxFeedback } from "@/lib/types";
 
@@ -69,9 +69,10 @@ export function CreatePoolModal({ open, onClose, onCreated, groupId, onSuccessFe
       onCreated(result.poolId ?? null);
       handleClose();
     } catch (error) {
+      const isRejected = error instanceof TxError && error.kind === "rejected";
       setFeedback({
-        state: "error",
-        title: "Pool creation failed",
+        state: isRejected ? "rejected" : "error",
+        title: isRejected ? "Pool creation canceled" : "Pool creation failed",
         detail: error instanceof Error ? error.message : "The pool could not be created.",
       });
     } finally {

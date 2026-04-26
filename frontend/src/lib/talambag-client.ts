@@ -13,6 +13,22 @@ import {
 import { appConfig, getExpectedNetworkPassphrase, hasRequiredConfig } from "@/lib/config";
 import { signWithActiveWallet } from "@/lib/wallet-kit";
 import type { ContractSnapshot, GroupSummary, PoolEvent, PoolSummary } from "@/lib/types";
+import type { WalletErrorKind } from "@/lib/types";
+
+/**
+ * Typed error thrown by contract calls.
+ * `kind` matches `WalletErrorKind` so callers can set TxState = "rejected"
+ * when the user cancels rather than showing a generic error banner.
+ */
+export class TxError extends Error {
+  readonly kind: WalletErrorKind;
+
+  constructor(message: string, kind: WalletErrorKind = "other") {
+    super(message);
+    this.name = "TxError";
+    this.kind = kind;
+  }
+}
 
 type ContractArg = {
   value: string | bigint | number;
@@ -31,9 +47,72 @@ function ensureConfigured() {
   }
 }
 
+/**
+ * Classifies a raw error thrown during a wallet interaction or contract call.
+ *
+ * The three categories required by the Level-2 spec are surfaced explicitly:
+ *  - wallet_not_found  – extension missing / not installed in this browser
+ *  - rejected          – user canceled the prompt (not a failure)
+ *  - insufficient_balance – XLM fee too low or pool balance too low to withdraw
+ */
+export function classifyError(error: unknown): WalletErrorKind {
+  const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
+
+  if (
+    message.includes("not installed") ||
+    message.includes("not available") ||
+    message.includes("install") ||
+    message.includes("wallet not found") ||
+    message.includes("no wallet")
+  ) {
+    return "wallet_not_found";
+  }
+
+  if (
+    message.includes("rejected") ||
+    message.includes("denied") ||
+    message.includes("cancelled") ||
+    message.includes("canceled") ||
+    message.includes("user closed") ||
+    message.includes("user declined")
+  ) {
+    return "rejected";
+  }
+
+  if (
+    message.includes("#7") ||
+    /insufficientpoolbalance/i.test(message) ||
+    message.includes("insufficient balance") ||
+    message.includes("insufficient funds") ||
+    message.includes("op_underfunded") ||
+    message.includes("tx_insufficient_balance") ||
+    message.includes("not enough")
+  ) {
+    return "insufficient_balance";
+  }
+
+  return "other";
+}
+
 function normalizeError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
 
+  // ── Wallet-level errors ────────────────────────────────────────────────────
+  const kind = classifyError(error);
+
+  if (kind === "wallet_not_found") {
+    return "The selected wallet is not installed or not available in this browser. Install a supported wallet extension and try again.";
+  }
+
+  if (kind === "rejected") {
+    return "The wallet request was canceled. Approve the prompt in your wallet to continue.";
+  }
+
+  if (kind === "insufficient_balance") {
+    return "Insufficient balance. Make sure the pool has enough funds and your wallet has XLM to cover the transaction fee.";
+  }
+
+  // ── Contract error codes ───────────────────────────────────────────────────
   if (message.includes("#1") || /Unauthorized/i.test(message)) {
     return "Only the allowed wallet can perform this action.";
   }
@@ -125,7 +204,15 @@ async function signAndSubmit<T>(
   const server = getServer();
   const transaction = await buildTransaction(sourceAddress, method, args);
   const preparedTransaction = await server.prepareTransaction(transaction);
-  const signedXdr = await signWithActiveWallet(preparedTransaction.toXDR(), sourceAddress);
+
+  let signedXdr: string;
+  try {
+    signedXdr = await signWithActiveWallet(preparedTransaction.toXDR(), sourceAddress);
+  } catch (error) {
+    const kind = classifyError(error);
+    throw new TxError(normalizeError(error), kind);
+  }
+
   const signedTransaction = TransactionBuilder.fromXDR(
     signedXdr,
     getExpectedNetworkPassphrase(),
@@ -134,7 +221,8 @@ async function signAndSubmit<T>(
   const sendResponse = await server.sendTransaction(signedTransaction);
 
   if (sendResponse.status !== "PENDING") {
-    throw new Error(normalizeError(sendResponse.errorResult ?? sendResponse.status));
+    const message = normalizeError(sendResponse.errorResult ?? sendResponse.status);
+    throw new TxError(message, classifyError(message));
   }
 
   const finalResponse = await server.pollTransaction(sendResponse.hash, {
@@ -143,11 +231,12 @@ async function signAndSubmit<T>(
   });
 
   if (finalResponse.status === rpc.Api.GetTransactionStatus.NOT_FOUND) {
-    throw new Error("Transaction was submitted but could not be found on the RPC server.");
+    throw new TxError("Transaction was submitted but could not be found on the RPC server.");
   }
 
   if (finalResponse.status === rpc.Api.GetTransactionStatus.FAILED) {
-    throw new Error(normalizeError(finalResponse.resultXdr));
+    const message = normalizeError(finalResponse.resultXdr);
+    throw new TxError(message, classifyError(message));
   }
 
   return {

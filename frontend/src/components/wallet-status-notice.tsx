@@ -22,11 +22,13 @@ function getWalletNotice(
     };
   }
 
-  if (wallet.status === "unsupported" && wallet.error) {
+  if (wallet.status === "unsupported") {
     return {
       tone: "danger",
-      title: "Wallet integration unavailable",
-      detail: wallet.error,
+      title: "Wallet not found",
+      detail:
+        wallet.error ??
+        "No compatible Stellar wallet extension was detected. Install Freighter or another supported wallet and reload the page.",
     };
   }
 

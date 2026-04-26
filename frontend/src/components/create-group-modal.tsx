@@ -5,7 +5,7 @@ import { Modal } from "@/components/modal";
 import { FeedbackBanner } from "@/components/feedback-banner";
 import { useWallet } from "@/contexts/wallet-context";
 import { appConfig } from "@/lib/config";
-import { createGroup } from "@/lib/talambag-client";
+import { TxError, createGroup } from "@/lib/talambag-client";
 import { isValidStellarAddress, requireText } from "@/lib/validators";
 import type { TxFeedback } from "@/lib/types";
 
@@ -72,9 +72,10 @@ export function CreateGroupModal({ open, onClose, onCreated, onSuccessFeedback }
       onCreated();
       handleClose();
     } catch (error) {
+      const isRejected = error instanceof TxError && error.kind === "rejected";
       setFeedback({
-        state: "error",
-        title: "Group creation failed",
+        state: isRejected ? "rejected" : "error",
+        title: isRejected ? "Group creation canceled" : "Group creation failed",
         detail: error instanceof Error ? error.message : "The group could not be created.",
       });
     } finally {
