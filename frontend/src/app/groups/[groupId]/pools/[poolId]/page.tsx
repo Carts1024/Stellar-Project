@@ -12,6 +12,7 @@ import {
   fetchPoolEvents,
   getContractSnapshot,
   withdrawFromPool,
+  TxError,
 } from "@/lib/talambag-client";
 import { isValidStellarAddress } from "@/lib/validators";
 import type { GroupSummary, PoolEvent, PoolSummary, TxFeedback } from "@/lib/types";
@@ -78,7 +79,7 @@ export default function PoolPage() {
     setFeedback({
       state: "signing",
       title: "Awaiting organizer signature",
-      detail: "Freighter will confirm the pool withdrawal.",
+      detail: "Your selected wallet will confirm the pool withdrawal.",
     });
 
     try {
@@ -108,9 +109,10 @@ export default function PoolPage() {
       setWithdrawRecipient("");
       void loadPool();
     } catch (error) {
+      const isRejected = error instanceof TxError && error.kind === "rejected";
       setFeedback({
-        state: "error",
-        title: "Withdrawal failed",
+        state: isRejected ? "rejected" : "error",
+        title: isRejected ? "Withdrawal canceled" : "Withdrawal failed",
         detail: error instanceof Error ? error.message : "The withdrawal could not be submitted.",
       });
     } finally {

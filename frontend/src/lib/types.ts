@@ -1,6 +1,14 @@
 export type ContractStatus = "idle" | "loading" | "ready" | "error";
 export type WalletStatus = "disconnected" | "connecting" | "connected" | "unsupported";
-export type TxState = "idle" | "signing" | "submitting" | "success" | "error";
+
+/** "rejected" = user explicitly canceled the wallet prompt (not an error). */
+export type TxState = "idle" | "signing" | "submitting" | "success" | "rejected" | "error";
+
+/**
+ * Classifies a wallet or contract error into one of three required categories
+ * (wallet_not_found, rejected, insufficient_balance) or a generic fallback.
+ */
+export type WalletErrorKind = "wallet_not_found" | "rejected" | "insufficient_balance" | "other";
 
 export type TxFeedback = {
   state: TxState;
@@ -48,9 +56,12 @@ export type ContractSnapshot = {
 export type WalletSnapshot = {
   status: WalletStatus;
   address: string | null;
+  walletId: string | null;
+  walletName: string | null;
   network: string | null;
   networkPassphrase: string | null;
   isExpectedNetwork: boolean;
+  isNetworkVerified: boolean;
   xlmBalance: string | null;
   error?: string;
 };

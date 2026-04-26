@@ -18,18 +18,3 @@ export function requireText(value: string, label: string) {
 
   return normalized;
 }
-
-export function parsePositiveInteger(value: string, label: string) {
-  const normalized = value.trim();
-
-  if (!/^\d+$/.test(normalized)) {
-    throw new Error(`${label} must be a positive whole number.`);
-  }
-
-  const parsed = Number(normalized);
-  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
-    throw new Error(`${label} must be a positive whole number.`);
-  }
-
-  return parsed;
-}

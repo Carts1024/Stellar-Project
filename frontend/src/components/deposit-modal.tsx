@@ -6,7 +6,7 @@ import { FeedbackBanner } from "@/components/feedback-banner";
 import { useWallet } from "@/contexts/wallet-context";
 import { appConfig } from "@/lib/config";
 import { parseAmountToInt } from "@/lib/format";
-import { depositToPool } from "@/lib/talambag-client";
+import { TxError, depositToPool } from "@/lib/talambag-client";
 import type { TxFeedback } from "@/lib/types";
 
 type Props = {
@@ -46,7 +46,7 @@ export function DepositModal({
     setFeedback({
       state: "signing",
       title: "Awaiting contribution signature",
-      detail: "Freighter will ask you to approve the deposit.",
+      detail: "Your selected wallet will ask you to approve the deposit.",
     });
 
     try {
@@ -78,9 +78,10 @@ export function DepositModal({
       onDeposited();
       handleClose();
     } catch (error) {
+      const isRejected = error instanceof TxError && error.kind === "rejected";
       setFeedback({
-        state: "error",
-        title: "Contribution failed",
+        state: isRejected ? "rejected" : "error",
+        title: isRejected ? "Contribution canceled" : "Contribution failed",
         detail: error instanceof Error ? error.message : "The deposit transaction failed.",
       });
     } finally {

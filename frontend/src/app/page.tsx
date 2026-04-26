@@ -76,7 +76,7 @@ export default function DashboardPage() {
             {wallet.xlmBalance !== null
               ? shortenAddress(wallet.address)
               : wallet.network
-                ? `${wallet.network} via Freighter`
+                ? `${wallet.network}${wallet.walletName ? ` via ${wallet.walletName}` : " via connected wallet"}`
                 : "Not connected"}
           </span>
         </article>
@@ -89,7 +89,7 @@ export default function DashboardPage() {
             {wallet.isExpectedNetwork
               ? "Ready for transactions"
               : wallet.status === "connected"
-                ? "Switch Freighter to the correct network"
+                ? "Switch the connected wallet to the correct network"
                 : "Connect wallet to begin"}
           </span>
         </article>

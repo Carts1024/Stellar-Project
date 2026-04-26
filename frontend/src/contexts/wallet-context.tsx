@@ -1,20 +1,20 @@
 "use client";
 
 import { createContext, useContext, type ReactNode } from "react";
-import { useFreighterWallet } from "@/hooks/use-freighter-wallet";
+import { useWalletKit } from "@/hooks/use-wallet-kit";
 import type { WalletSnapshot } from "@/lib/types";
 
 type WalletContextValue = {
   wallet: WalletSnapshot;
   connectWallet: () => Promise<WalletSnapshot>;
-  disconnectWallet: () => void;
+  disconnectWallet: () => Promise<void>;
   refreshWallet: () => Promise<WalletSnapshot>;
 };
 
 const WalletContext = createContext<WalletContextValue | null>(null);
 
 export function WalletProvider({ children }: { children: ReactNode }) {
-  const value = useFreighterWallet();
+  const value = useWalletKit();
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
 }
 

@@ -15,8 +15,12 @@ export function FeedbackBanner({ feedback }: FeedbackBannerProps) {
     return `${appConfig.explorerUrl}/tx/${hash}`;
   }
 
+  // "rejected" is a user-initiated cancellation, not an error — render as a
+  // neutral notice so the banner tone does not alarm the user unnecessarily.
+  const displayState = feedback.state === "rejected" ? "error" : feedback.state;
+
   return (
-    <section className={`feedback-card ${feedback.state}`}>
+    <section className={`feedback-card ${displayState}`}>
       <div>
         <h2>{feedback.title}</h2>
         {feedback.detail ? <p>{feedback.detail}</p> : null}

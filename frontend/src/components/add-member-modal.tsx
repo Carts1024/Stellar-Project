@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Modal } from "@/components/modal";
 import { FeedbackBanner } from "@/components/feedback-banner";
 import { useWallet } from "@/contexts/wallet-context";
-import { addGroupMember } from "@/lib/talambag-client";
+import { TxError, addGroupMember } from "@/lib/talambag-client";
 import { isValidStellarAddress } from "@/lib/validators";
 import type { TxFeedback } from "@/lib/types";
 
@@ -38,7 +38,7 @@ export function AddMemberModal({ open, onClose, onAdded, groupId, onSuccessFeedb
     setFeedback({
       state: "signing",
       title: "Awaiting member approval",
-      detail: "Freighter will confirm the membership update.",
+      detail: "Your selected wallet will confirm the membership update.",
     });
 
     try {
@@ -65,9 +65,10 @@ export function AddMemberModal({ open, onClose, onAdded, groupId, onSuccessFeedb
       onAdded();
       handleClose();
     } catch (error) {
+      const isRejected = error instanceof TxError && error.kind === "rejected";
       setFeedback({
-        state: "error",
-        title: "Adding the member failed",
+        state: isRejected ? "rejected" : "error",
+        title: isRejected ? "Member addition canceled" : "Adding the member failed",
         detail: error instanceof Error ? error.message : "The member could not be added.",
       });
     } finally {
