@@ -121,7 +121,12 @@ export default function PoolPage() {
   }
 
   if (isLoading) {
-    return <div className="loading-state">Loading pool...</div>;
+    return (
+      <div className="loading-state">
+        <span className="spinner" aria-hidden="true" />
+        Loading pool...
+      </div>
+    );
   }
 
   if (!pool) {
@@ -258,7 +263,10 @@ export default function PoolPage() {
       <section style={{ marginTop: 28 }}>
         <h2 style={{ margin: "0 0 12px", fontSize: "1.35rem" }}>Transaction History</h2>
         {eventsLoading ? (
-          <div className="loading-state">Loading events...</div>
+          <div className="loading-state">
+            <span className="spinner" aria-hidden="true" />
+            Loading events...
+          </div>
         ) : events.length === 0 ? (
           <div className="empty-state">
             <h3>No events recorded yet</h3>

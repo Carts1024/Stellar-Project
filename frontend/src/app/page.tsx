@@ -121,7 +121,10 @@ export default function DashboardPage() {
         />
 
         {isLoading ? (
-          <div className="loading-state">Loading groups...</div>
+          <div className="loading-state">
+            <span className="spinner" aria-hidden="true" />
+            Loading groups...
+          </div>
         ) : filteredGroups.length === 0 ? (
           <div className="empty-state">
             <h3>{search ? "No groups match your search" : "No groups yet"}</h3>

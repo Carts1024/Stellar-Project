@@ -62,7 +62,12 @@ export default function GroupPage() {
     : pools;
 
   if (isLoading) {
-    return <div className="loading-state">Loading group...</div>;
+    return (
+      <div className="loading-state">
+        <span className="spinner" aria-hidden="true" />
+        Loading group...
+      </div>
+    );
   }
 
   if (!group) {

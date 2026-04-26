@@ -12,6 +12,7 @@ import {
 } from "@stellar/stellar-sdk";
 import { appConfig, getExpectedNetworkPassphrase, hasRequiredConfig } from "@/lib/config";
 import { signWithActiveWallet } from "@/lib/wallet-kit";
+import { getCached, invalidateCached, setCached } from "@/lib/cache";
 import type { ContractSnapshot, GroupSummary, PoolEvent, PoolSummary } from "@/lib/types";
 import type { WalletErrorKind } from "@/lib/types";
 
@@ -367,11 +368,19 @@ function getReadAddress() {
 }
 
 async function readGroup(groupId: number) {
-  return simulateRead(getReadAddress(), "group", buildArgs([{ value: groupId, type: "u32" }]), normalizeGroup);
+  const key = `group:${groupId}`;
+  const cached = getCached<GroupSummary>(key);
+  if (cached) return cached;
+  const result = await simulateRead(getReadAddress(), "group", buildArgs([{ value: groupId, type: "u32" }]), normalizeGroup);
+  setCached(key, result);
+  return result;
 }
 
 async function readPool(groupId: number, poolId: number) {
-  return simulateRead(
+  const key = `pool:${groupId}:${poolId}`;
+  const cached = getCached<PoolSummary>(key);
+  if (cached) return cached;
+  const result = await simulateRead(
     getReadAddress(),
     "pool",
     buildArgs([
@@ -380,6 +389,8 @@ async function readPool(groupId: number, poolId: number) {
     ]),
     normalizePool,
   );
+  setCached(key, result);
+  return result;
 }
 
 async function readMembership(groupId: number, walletAddress: string) {
@@ -456,6 +467,8 @@ export async function createGroup(
     onSubmitting,
   );
 
+  invalidateCached("group_count");
+
   return {
     hash: response.hash,
     groupId: response.result ?? null,
@@ -468,7 +481,7 @@ export async function addGroupMember(
   member: string,
   onSubmitting?: () => void,
 ) {
-  return signAndSubmit(
+  const result = await signAndSubmit(
     owner,
     "add_member",
     buildArgs([
@@ -479,6 +492,10 @@ export async function addGroupMember(
     undefined,
     onSubmitting,
   );
+
+  invalidateCached(`group:${groupId}`);
+
+  return result;
 }
 
 export async function createPool(
@@ -499,6 +516,8 @@ export async function createPool(
     onSubmitting,
   );
 
+  invalidateCached(`group:${groupId}`);
+
   return {
     hash: response.hash,
     poolId: response.result ?? null,
@@ -512,7 +531,7 @@ export async function depositToPool(
   amount: bigint,
   onSubmitting?: () => void,
 ) {
-  return signAndSubmit(
+  const result = await signAndSubmit(
     from,
     "deposit",
     buildArgs([
@@ -524,6 +543,10 @@ export async function depositToPool(
     undefined,
     onSubmitting,
   );
+
+  invalidateCached(`pool:${groupId}:${poolId}`);
+
+  return result;
 }
 
 export async function withdrawFromPool(
@@ -534,7 +557,7 @@ export async function withdrawFromPool(
   amount: bigint,
   onSubmitting?: () => void,
 ) {
-  return signAndSubmit(
+  const result = await signAndSubmit(
     organizer,
     "withdraw",
     buildArgs([
@@ -547,15 +570,24 @@ export async function withdrawFromPool(
     undefined,
     onSubmitting,
   );
+
+  invalidateCached(`pool:${groupId}:${poolId}`);
+
+  return result;
 }
 
 export async function readGroupCount() {
-  return simulateRead(
+  const key = "group_count";
+  const cached = getCached<number>(key);
+  if (cached !== undefined) return cached;
+  const result = await simulateRead(
     getReadAddress(),
     "group_count",
     buildArgs([]),
     normalizeNumber,
   );
+  setCached(key, result);
+  return result;
 }
 
 export async function listGroups(): Promise<GroupSummary[]> {
