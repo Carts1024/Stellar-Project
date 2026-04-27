@@ -102,12 +102,25 @@ impl RewardTokenContract {
         env.storage().instance().get(&DataKey::CoreContract)
     }
 
+    pub fn is_group_registered(env: Env, group_id: u32) -> bool {
+        Self::touch_instance(&env);
+        env.storage().instance().has(&DataKey::GroupOwner(group_id))
+    }
+
     pub fn register_group(env: Env, group_id: u32, owner: Address) -> Result<(), Error> {
         Self::touch_instance(&env);
         let core_contract = Self::require_core_contract(&env)?;
         core_contract.require_auth();
 
-        if env.storage().instance().has(&DataKey::GroupOwner(group_id)) {
+        if let Some(existing_owner) = env
+            .storage()
+            .instance()
+            .get::<_, Address>(&DataKey::GroupOwner(group_id))
+        {
+            if existing_owner == owner {
+                return Ok(());
+            }
+
             return Err(Error::AlreadyGroupRegistered);
         }
 

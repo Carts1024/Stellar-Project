@@ -29,7 +29,7 @@ mod tests {
         String::from_str(env, value)
     }
 
-    fn setup() -> TestContext {
+    fn setup_with_rewards_link(link_rewards: bool) -> TestContext {
         let env = Env::default();
         env.mock_all_auths();
 
@@ -63,8 +63,10 @@ mod tests {
         let client = TalambagContractClient::new(env_ref, &contract_id);
         let rewards_client = RewardTokenContractClient::new(env_ref, &rewards_id);
 
-        client.set_rewards_contract(&contract_admin, &rewards_id);
-        rewards_client.set_core_contract(&contract_admin, &contract_id);
+        if link_rewards {
+            client.set_rewards_contract(&contract_admin, &rewards_id);
+            rewards_client.set_core_contract(&contract_admin, &contract_id);
+        }
 
         TestContext {
             env: env_ref.clone(),
@@ -79,6 +81,14 @@ mod tests {
             recipient,
             asset_address,
         }
+    }
+
+    fn setup() -> TestContext {
+        setup_with_rewards_link(true)
+    }
+
+    fn setup_without_rewards_link() -> TestContext {
+        setup_with_rewards_link(false)
     }
 
     fn create_group_with_members(context: &TestContext) -> u32 {
@@ -215,6 +225,32 @@ mod tests {
         assert_eq!(context.client.admin(), context.contract_admin);
         assert_eq!(context.client.rewards_contract(), Some(context.rewards_client.address.clone()));
         assert_eq!(context.rewards_client.group_owner(&group_id), context.group_owner);
+    }
+
+    #[test]
+    fn deposit_registers_existing_groups_after_rewards_linking() {
+        let context = setup_without_rewards_link();
+        let group_id = create_group_with_members(&context);
+        let pool_id = create_pool(&context, group_id);
+
+        context
+            .client
+            .set_rewards_contract(&context.contract_admin, &context.rewards_client.address);
+        context
+            .rewards_client
+            .set_core_contract(&context.contract_admin, &context.client.address);
+
+        context
+            .client
+            .deposit(&context.contributor, &group_id, &pool_id, &125);
+
+        assert_eq!(context.rewards_client.group_owner(&group_id), context.group_owner);
+        assert_eq!(
+            context
+                .rewards_client
+                .pending_reward(&group_id, &context.contributor),
+            125
+        );
     }
 
     #[test]

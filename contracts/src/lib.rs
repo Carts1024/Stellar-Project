@@ -375,6 +375,10 @@ impl TalambagContract {
 
     fn record_contribution_with_rewards(env: &Env, group_id: u32, contributor: Address, amount: i128) {
         if let Some(rewards_contract) = env.storage().instance().get::<_, Address>(&DataKey::RewardsContract) {
+            if let Some(group) = env.storage().instance().get::<_, Group>(&DataKey::Group(group_id)) {
+                Self::register_group_with_rewards(env, group_id, group.owner);
+            }
+
             env.invoke_contract::<i128>(
                 &rewards_contract,
                 &Symbol::new(env, "record_contribution"),

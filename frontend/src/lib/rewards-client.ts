@@ -199,6 +199,14 @@ function normalizeNumber(value: unknown) {
   return normalized;
 }
 
+function normalizeBoolean(value: unknown) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  throw new Error("Unable to parse boolean value returned by the rewards contract.");
+}
+
 function normalizeString(value: unknown) {
   if (typeof value === "string") {
     return value;
@@ -311,6 +319,15 @@ async function readContributedAmount(groupId: number, walletAddress: string) {
   return result;
 }
 
+async function readGroupRegistration(groupId: number) {
+  return simulateRead(
+    getReadAddress(),
+    "is_group_registered",
+    buildArgs([{ value: groupId, type: "u32" }]),
+    normalizeBoolean,
+  );
+}
+
 async function readTotalSupply() {
   const key = "reward:total-supply";
   const cached = getCached<bigint>(key);
@@ -351,8 +368,25 @@ export async function getRewardSnapshot(
       };
     }
 
-    const [balance, pendingReward, contributedAmount] = await Promise.all([
+    const [balance, isGroupRegistered] = await Promise.all([
       readBalance(walletAddress),
+      readGroupRegistration(groupId),
+    ]);
+
+    if (!isGroupRegistered) {
+      return {
+        status: "ready",
+        groupId,
+        walletAddress,
+        metadata,
+        balance,
+        pendingReward: 0n,
+        contributedAmount: 0n,
+        totalSupply,
+      };
+    }
+
+    const [pendingReward, contributedAmount] = await Promise.all([
       readPendingReward(groupId, walletAddress),
       readContributedAmount(groupId, walletAddress),
     ]);

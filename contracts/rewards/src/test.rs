@@ -298,15 +298,30 @@ fn claim_requires_the_user_to_still_be_a_group_member() {
 }
 
 #[test]
-fn duplicate_group_registration_is_rejected() {
+fn duplicate_group_registration_with_the_same_owner_is_idempotent() {
     let context = setup();
     let group_id = 15;
 
     register_group(&context, group_id);
 
+    context
+        .rewards_client
+        .register_group(&group_id, &context.group_owner);
+
+    assert!(context.rewards_client.is_group_registered(&group_id));
+    assert_eq!(context.rewards_client.group_owner(&group_id), context.group_owner);
+}
+
+#[test]
+fn duplicate_group_registration_with_a_different_owner_is_rejected() {
+    let context = setup();
+    let group_id = 16;
+
+    register_group(&context, group_id);
+
     let result = context
         .rewards_client
-        .try_register_group(&group_id, &context.group_owner);
+        .try_register_group(&group_id, &context.member);
 
     assert_eq!(result, Err(Ok(Error::AlreadyGroupRegistered)));
 }
