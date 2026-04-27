@@ -4,6 +4,11 @@ Talambag, A portmanteau of Tala (Star/Stellar) and Ambag (Contribution). It lite
 
 Instead of collecting money through opaque chat threads and manually tracking who paid, Talambag records group membership, pool creation, contributions, and organizer withdrawals on-chain.
 
+
+## Live Demo Link
+
+https://talambag.vercel.app/
+
 ## Demo Video
 
 [![Watch the Talambag Demo](https://img.youtube.com/vi/Y03vvhb_GjQ/maxresdefault.jpg)](https://www.youtube.com/watch?v=Y03vvhb_GjQ)
