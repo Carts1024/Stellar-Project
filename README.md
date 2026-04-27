@@ -4,6 +4,10 @@ Talambag, A portmanteau of Tala (Star/Stellar) and Ambag (Contribution). It lite
 
 Instead of collecting money through opaque chat threads and manually tracking who paid, Talambag records group membership, pool creation, contributions, and organizer withdrawals on-chain.
 
+## Demo Video
+
+<iframe width="560" height="315" src="https://drive.google.com/file/d/1QgDBnBEA3MAql2b_HV0pdgDzF8tW-yay/preview" allow="autoplay"></iframe>
+
 ## UI Screenshots
 
 Add your app screenshots inside `frontend/public/screenshots/` and keep the filenames below to render images automatically in this README.
