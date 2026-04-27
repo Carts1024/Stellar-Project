@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "stellar-dev": {
+      "source": "stellar/stellar-dev-skill",
+      "sourceType": "github",
+      "computedHash": "a91e2545dcfb1a224b70338dd44825678728b5c3254a1cf49190e9bd487a440a"
+    }
+  }
+}
