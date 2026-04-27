@@ -1,16 +1,57 @@
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { parseEnv } from "node:util";
 import { z } from "zod";
+
+const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+function loadLocalEnvironmentFile(fileName: ".env" | ".env.local") {
+  const filePath = resolve(projectRoot, fileName);
+
+  if (!existsSync(filePath)) {
+    return;
+  }
+
+  const fileEnvironment = parseEnv(readFileSync(filePath, "utf8"));
+
+  for (const [key, value] of Object.entries(fileEnvironment)) {
+    const currentValue = process.env[key];
+
+    if (currentValue === undefined || currentValue.trim() === "") {
+      process.env[key] = value;
+    }
+  }
+}
+
+function emptyStringToUndefined(value: unknown) {
+  if (typeof value === "string" && value.trim() === "") {
+    return undefined;
+  }
+
+  return value;
+}
+
+loadLocalEnvironmentFile(".env.local");
+loadLocalEnvironmentFile(".env");
+
+const requiredEnvString = z.string().trim().min(1);
+const optionalPositiveInt = z.preprocess(
+  emptyStringToUndefined,
+  z.coerce.number().int().positive().optional(),
+);
 
 const environmentSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().positive().default(8080),
-  INDEXER_DATABASE_URL: z.string().min(1),
-  INDEXER_STELLAR_RPC_URL: z.string().url(),
-  INDEXER_CORE_CONTRACT_ID: z.string().min(1),
-  INDEXER_REWARD_CONTRACT_ID: z.string().min(1),
+  INDEXER_DATABASE_URL: requiredEnvString,
+  INDEXER_STELLAR_RPC_URL: requiredEnvString.url(),
+  INDEXER_CORE_CONTRACT_ID: requiredEnvString,
+  INDEXER_REWARD_CONTRACT_ID: requiredEnvString,
   INDEXER_POLL_INTERVAL_MS: z.coerce.number().int().min(1_000).default(4_000),
   INDEXER_BATCH_LIMIT: z.coerce.number().int().min(1).max(1_000).default(200),
-  INDEXER_ALLOWED_ORIGIN: z.string().default("*"),
-  INDEXER_START_LEDGER: z.coerce.number().int().positive().optional(),
+  INDEXER_ALLOWED_ORIGIN: z.string().trim().default("*"),
+  INDEXER_START_LEDGER: optionalPositiveInt,
 });
 
 export const indexerConfig = environmentSchema.parse(process.env);
