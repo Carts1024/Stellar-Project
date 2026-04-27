@@ -7,3 +7,4 @@ contracts/target
 /frontend/.env*.local
 /indexer/node_modules
 /indexer/dist
+.env*

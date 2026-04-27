@@ -1,27 +1,30 @@
+import type { Server as HttpServer } from "node:http";
 import cors from "cors";
 import express from "express";
+import { ZodError } from "zod";
 import { indexerConfig } from "./config.js";
-import { ensureDatabase, getDatabaseHealth, listEvents } from "./db.js";
+import { eventStore } from "./db.js";
 import { TalambagIndexer } from "./indexer.js";
+import { parseEventListFilters, parseEventStreamFilters } from "./request-schemas.js";
 import type { NormalizedContractEvent } from "./types.js";
+import type { PoolEventFilters } from "./types.js";
 
 const app = express();
-const indexer = new TalambagIndexer();
+const indexer = new TalambagIndexer({ eventStore });
+
+type StreamFilters = Readonly<Pick<PoolEventFilters, "groupId" | "poolId">>;
 
 type StreamClient = {
-  filters: {
-    groupId?: number;
-    poolId?: number;
-  };
+  filters: StreamFilters;
+  keepAliveTimer: NodeJS.Timeout;
   response: express.Response;
 };
 
 const streamClients = new Set<StreamClient>();
+let server: HttpServer | null = null;
+let isShuttingDown = false;
 
-function matchesFilters(
-  event: NormalizedContractEvent,
-  filters: { groupId?: number; poolId?: number },
-) {
+function matchesFilters(event: NormalizedContractEvent, filters: StreamFilters) {
   if (filters.groupId !== undefined && event.groupId !== filters.groupId) {
     return false;
   }
@@ -33,8 +36,28 @@ function matchesFilters(
   return true;
 }
 
+function closeStreamClient(client: StreamClient) {
+  clearInterval(client.keepAliveTimer);
+  streamClients.delete(client);
+
+  if (!client.response.writableEnded) {
+    client.response.end();
+  }
+}
+
+function closeAllStreamClients() {
+  for (const client of Array.from(streamClients)) {
+    closeStreamClient(client);
+  }
+}
+
 indexer.onEvent((event) => {
   for (const client of streamClients) {
+    if (client.response.writableEnded) {
+      closeStreamClient(client);
+      continue;
+    }
+
     if (!matchesFilters(event, client.filters)) {
       continue;
     }
@@ -52,7 +75,7 @@ app.use(
 app.get("/health", async (_request, response) => {
   response.json({
     ok: true,
-    databaseTime: await getDatabaseHealth(),
+    databaseTime: await eventStore.getDatabaseHealth(),
     contracts: {
       core: indexerConfig.INDEXER_CORE_CONTRACT_ID,
       rewards: indexerConfig.INDEXER_REWARD_CONTRACT_ID,
@@ -63,17 +86,8 @@ app.get("/health", async (_request, response) => {
 
 app.get("/events", async (request, response, next) => {
   try {
-    const groupId =
-      typeof request.query.groupId === "string" ? Number(request.query.groupId) : undefined;
-    const poolId =
-      typeof request.query.poolId === "string" ? Number(request.query.poolId) : undefined;
-    const limit = typeof request.query.limit === "string" ? Number(request.query.limit) : undefined;
-
-    const events = await listEvents({
-      groupId: Number.isFinite(groupId) ? groupId : undefined,
-      poolId: Number.isFinite(poolId) ? poolId : undefined,
-      limit: Number.isFinite(limit) ? limit : undefined,
-    });
+    const filters = parseEventListFilters(request.query);
+    const events = await eventStore.listEvents(filters);
 
     response.json({ events });
   } catch (error) {
@@ -81,38 +95,37 @@ app.get("/events", async (request, response, next) => {
   }
 });
 
-app.get("/events/stream", (request, response) => {
-  const groupId =
-    typeof request.query.groupId === "string" ? Number(request.query.groupId) : undefined;
-  const poolId =
-    typeof request.query.poolId === "string" ? Number(request.query.poolId) : undefined;
+app.get("/events/stream", (request, response, next) => {
+  try {
+    const filters = parseEventStreamFilters(request.query);
 
-  response.writeHead(200, {
-    "cache-control": "no-cache, no-transform",
-    connection: "keep-alive",
-    "content-type": "text/event-stream",
-  });
-  response.write(`event: ready\ndata: ${JSON.stringify({ ok: true })}\n\n`);
+    response.writeHead(200, {
+      "cache-control": "no-cache, no-transform",
+      connection: "keep-alive",
+      "content-type": "text/event-stream",
+    });
+    response.write(`event: ready\ndata: ${JSON.stringify({ ok: true })}\n\n`);
 
-  const client: StreamClient = {
-    filters: {
-      groupId: Number.isFinite(groupId) ? groupId : undefined,
-      poolId: Number.isFinite(poolId) ? poolId : undefined,
-    },
-    response,
-  };
+    const keepAliveTimer = setInterval(() => {
+      if (!response.writableEnded) {
+        response.write(": keep-alive\n\n");
+      }
+    }, 15_000);
 
-  streamClients.add(client);
+    const client: StreamClient = {
+      filters,
+      keepAliveTimer,
+      response,
+    };
 
-  const keepAlive = setInterval(() => {
-    response.write(": keep-alive\n\n");
-  }, 15_000);
+    streamClients.add(client);
 
-  request.on("close", () => {
-    clearInterval(keepAlive);
-    streamClients.delete(client);
-    response.end();
-  });
+    request.on("close", () => {
+      closeStreamClient(client);
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.use(
@@ -122,19 +135,75 @@ app.use(
     response: express.Response,
     _next: express.NextFunction,
   ) => {
+    if (error instanceof ZodError) {
+      response.status(400).json({
+        error: "Invalid request parameters.",
+        details: error.flatten().fieldErrors,
+      });
+      return;
+    }
+
     response.status(500).json({
       error: error instanceof Error ? error.message : "Unexpected indexer error.",
     });
   },
 );
 
-async function main() {
-  await ensureDatabase();
-  await indexer.start();
+async function shutdown(signal: NodeJS.Signals) {
+  if (isShuttingDown) {
+    return;
+  }
 
-  app.listen(indexerConfig.PORT, () => {
+  isShuttingDown = true;
+  console.log(`Received ${signal}, shutting down indexer.`);
+
+  indexer.stop();
+  closeAllStreamClients();
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      if (!server) {
+        resolve();
+        return;
+      }
+
+      server.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+
+        resolve();
+      });
+    });
+  } finally {
+    await eventStore.disconnect();
+  }
+}
+
+function registerShutdownHandlers() {
+  for (const signal of ["SIGINT", "SIGTERM"] as const) {
+    process.once(signal, () => {
+      void shutdown(signal).catch((error) => {
+        console.error("Failed to shut down the indexer cleanly.", error);
+        process.exitCode = 1;
+      });
+    });
+  }
+}
+
+async function main() {
+  await eventStore.connect();
+  await indexer.start();
+  registerShutdownHandlers();
+
+  server = app.listen(indexerConfig.PORT, () => {
     console.log(`Talambag indexer listening on port ${indexerConfig.PORT}`);
   });
 }
 
-void main();
+void main().catch(async (error) => {
+  console.error("Failed to start the Talambag indexer.", error);
+  await eventStore.disconnect().catch(() => undefined);
+  process.exitCode = 1;
+});

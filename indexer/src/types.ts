@@ -1,5 +1,8 @@
 export type ContractSource = "core" | "rewards";
 
+export const DEFAULT_EVENT_LIST_LIMIT = 100;
+export const MAX_EVENT_LIST_LIMIT = 200;
+
 export type JsonValue =
   | string
   | number
@@ -44,8 +47,8 @@ export type RpcEventsResponse = {
   latestLedger: number;
 };
 
-export type PoolEventFilters = {
+export type PoolEventFilters = Readonly<{
   groupId?: number;
   poolId?: number;
   limit?: number;
-};
+}>;

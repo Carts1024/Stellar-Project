@@ -1,211 +1,230 @@
-import { Pool } from "pg";
-import { indexerConfig } from "./config.js";
-import type { NormalizedContractEvent, PoolEventFilters } from "./types.js";
+import { Prisma } from "@prisma/client";
+import { prisma } from "./prisma.js";
+import {
+  DEFAULT_EVENT_LIST_LIMIT,
+  MAX_EVENT_LIST_LIMIT,
+} from "./types.js";
+import type { JsonValue, NormalizedContractEvent, PoolEventFilters } from "./types.js";
 
-type ContractEventRow = {
-  actor: string | null;
-  amount: string | null;
-  contract_id: string;
-  cursor: string;
-  event_id: string;
-  event_type: string;
-  group_id: number | null;
-  ledger: number;
-  occurred_at: string | Date;
-  payload: NormalizedContractEvent["payload"];
-  pool_id: number | null;
-  recipient: string | null;
-  source: "core" | "rewards";
-  tx_hash: string;
-};
+const EVENTS_CURSOR_STATE_KEY = "events_cursor";
+const SERIALIZABLE_RETRY_LIMIT = 3;
 
-const pool = new Pool({
-  connectionString: indexerConfig.INDEXER_DATABASE_URL,
-  ssl: indexerConfig.INDEXER_DATABASE_URL.includes("sslmode=disable")
-    ? false
-    : { rejectUnauthorized: false },
+const contractEventSelect = Prisma.validator<Prisma.ContractEventSelect>()({
+  eventId: true,
+  cursor: true,
+  contractId: true,
+  source: true,
+  eventType: true,
+  groupId: true,
+  poolId: true,
+  actor: true,
+  recipient: true,
+  amount: true,
+  txHash: true,
+  ledger: true,
+  occurredAt: true,
+  payload: true,
 });
 
-const CREATE_CURSOR_TABLE = `
-  CREATE TABLE IF NOT EXISTS indexer_state (
-    state_key TEXT PRIMARY KEY,
-    state_value TEXT NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  );
-`;
+type ContractEventRecord = Prisma.ContractEventGetPayload<{
+  select: typeof contractEventSelect;
+}>;
 
-const CREATE_EVENTS_TABLE = `
-  CREATE TABLE IF NOT EXISTS contract_events (
-    event_id TEXT PRIMARY KEY,
-    cursor TEXT NOT NULL,
-    contract_id TEXT NOT NULL,
-    source TEXT NOT NULL,
-    event_type TEXT NOT NULL,
-    group_id INTEGER,
-    pool_id INTEGER,
-    actor TEXT,
-    recipient TEXT,
-    amount TEXT,
-    tx_hash TEXT NOT NULL,
-    ledger INTEGER NOT NULL,
-    occurred_at TIMESTAMPTZ NOT NULL,
-    payload JSONB NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  );
+export type StoreEventBatchInput = Readonly<{
+  events: readonly NormalizedContractEvent[];
+  cursor: string | null;
+}>;
 
-  CREATE INDEX IF NOT EXISTS contract_events_group_pool_idx
-    ON contract_events (group_id, pool_id, occurred_at DESC);
+export type StoreEventBatchResult = Readonly<{
+  insertedEvents: NormalizedContractEvent[];
+  storedCursor: string | null;
+}>;
 
-  CREATE INDEX IF NOT EXISTS contract_events_ledger_idx
-    ON contract_events (ledger DESC, event_id DESC);
-`;
-
-export async function ensureDatabase() {
-  await pool.query(CREATE_CURSOR_TABLE);
-  await pool.query(CREATE_EVENTS_TABLE);
+export interface DatabaseLifecycle {
+  connect(): Promise<void>;
+  disconnect(): Promise<void>;
 }
 
-export async function getStoredCursor() {
-  const result = await pool.query<{ state_value: string }>(
-    `SELECT state_value FROM indexer_state WHERE state_key = 'events_cursor'`,
-  );
-
-  return result.rows[0]?.state_value ?? null;
+export interface EventIngestionStore {
+  getStoredCursor(): Promise<string | null>;
+  storeEventBatch(batch: StoreEventBatchInput): Promise<StoreEventBatchResult>;
 }
 
-export async function storeEventBatch(events: NormalizedContractEvent[], cursor: string | null) {
-  const client = await pool.connect();
+export interface EventQueryStore {
+  listEvents(filters: PoolEventFilters): Promise<NormalizedContractEvent[]>;
+}
 
-  try {
-    await client.query("BEGIN");
+export interface DatabaseHealthStore {
+  getDatabaseHealth(): Promise<string | null>;
+}
 
-    for (const event of events) {
-      await client.query(
-        `
-          INSERT INTO contract_events (
-            event_id,
-            cursor,
-            contract_id,
-            source,
-            event_type,
-            group_id,
-            pool_id,
-            actor,
-            recipient,
-            amount,
-            tx_hash,
-            ledger,
-            occurred_at,
-            payload
-          )
-          VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb
-          )
-          ON CONFLICT (event_id) DO NOTHING
-        `,
-        [
-          event.eventId,
-          event.cursor,
-          event.contractId,
-          event.source,
-          event.eventType,
-          event.groupId,
-          event.poolId,
-          event.actor,
-          event.recipient,
-          event.amount,
-          event.txHash,
-          event.ledger,
-          event.occurredAt,
-          JSON.stringify(event.payload),
-        ],
-      );
+export interface EventStore
+  extends DatabaseLifecycle,
+    EventIngestionStore,
+    EventQueryStore,
+    DatabaseHealthStore {}
+
+function hasPrismaErrorCode(error: unknown, code: string) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === code
+  );
+}
+
+function clampEventLimit(limit: number | undefined) {
+  return Math.min(limit ?? DEFAULT_EVENT_LIST_LIMIT, MAX_EVENT_LIST_LIMIT);
+}
+
+function toOccurredAt(value: string) {
+  const occurredAt = new Date(value);
+
+  if (Number.isNaN(occurredAt.getTime())) {
+    throw new Error(`Invalid occurredAt value: ${value}`);
+  }
+
+  return occurredAt;
+}
+
+function toCreateInput(event: NormalizedContractEvent): Prisma.ContractEventUncheckedCreateInput {
+  return {
+    eventId: event.eventId,
+    cursor: event.cursor,
+    contractId: event.contractId,
+    source: event.source,
+    eventType: event.eventType,
+    groupId: event.groupId,
+    poolId: event.poolId,
+    actor: event.actor,
+    recipient: event.recipient,
+    amount: event.amount,
+    txHash: event.txHash,
+    ledger: event.ledger,
+    occurredAt: toOccurredAt(event.occurredAt),
+    payload: event.payload as Prisma.InputJsonValue,
+  };
+}
+
+function toNormalizedContractEvent(row: ContractEventRecord): NormalizedContractEvent {
+  return {
+    eventId: row.eventId,
+    cursor: row.cursor,
+    contractId: row.contractId,
+    source: row.source,
+    eventType: row.eventType,
+    groupId: row.groupId,
+    poolId: row.poolId,
+    actor: row.actor,
+    recipient: row.recipient,
+    amount: row.amount,
+    txHash: row.txHash,
+    ledger: row.ledger,
+    occurredAt: row.occurredAt.toISOString(),
+    payload: row.payload as JsonValue,
+  };
+}
+
+export class PrismaEventStore implements EventStore {
+  constructor(private readonly client: typeof prisma = prisma) {}
+
+  async connect() {
+    await this.client.$connect();
+  }
+
+  async disconnect() {
+    await this.client.$disconnect();
+  }
+
+  async getStoredCursor() {
+    const state = await this.client.indexerState.findUnique({
+      where: { stateKey: EVENTS_CURSOR_STATE_KEY },
+      select: { stateValue: true },
+    });
+
+    return state?.stateValue ?? null;
+  }
+
+  async storeEventBatch(batch: StoreEventBatchInput): Promise<StoreEventBatchResult> {
+    const insertedEvents = await this.runSerializableTransaction(async (transactionClient) => {
+      const persistedEvents: NormalizedContractEvent[] = [];
+
+      for (const event of batch.events) {
+        try {
+          await transactionClient.contractEvent.create({
+            data: toCreateInput(event),
+            select: { eventId: true },
+          });
+          persistedEvents.push(event);
+        } catch (error) {
+          if (!hasPrismaErrorCode(error, "P2002")) {
+            throw error;
+          }
+        }
+      }
+
+      if (batch.cursor !== null) {
+        await transactionClient.indexerState.upsert({
+          where: { stateKey: EVENTS_CURSOR_STATE_KEY },
+          create: {
+            stateKey: EVENTS_CURSOR_STATE_KEY,
+            stateValue: batch.cursor,
+          },
+          update: {
+            stateValue: batch.cursor,
+          },
+        });
+      }
+
+      return persistedEvents;
+    });
+
+    return {
+      insertedEvents,
+      storedCursor: batch.cursor,
+    };
+  }
+
+  async listEvents(filters: PoolEventFilters) {
+    const events = await this.client.contractEvent.findMany({
+      where: {
+        groupId: filters.groupId,
+        poolId: filters.poolId,
+      },
+      orderBy: [{ ledger: "desc" }, { eventId: "desc" }],
+      take: clampEventLimit(filters.limit),
+      select: contractEventSelect,
+    });
+
+    return events.map(toNormalizedContractEvent);
+  }
+
+  async getDatabaseHealth() {
+    const result = await this.client.$queryRaw<Array<{ now: string }>>`SELECT NOW()::text AS now`;
+    return result[0]?.now ?? null;
+  }
+
+  private async runSerializableTransaction<T>(
+    operation: (transactionClient: Prisma.TransactionClient) => Promise<T>,
+  ) {
+    let attempt = 0;
+
+    while (attempt < SERIALIZABLE_RETRY_LIMIT) {
+      try {
+        return await this.client.$transaction(operation, {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        });
+      } catch (error) {
+        attempt += 1;
+
+        if (!hasPrismaErrorCode(error, "P2034") || attempt >= SERIALIZABLE_RETRY_LIMIT) {
+          throw error;
+        }
+      }
     }
 
-    if (cursor) {
-      await client.query(
-        `
-          INSERT INTO indexer_state (state_key, state_value)
-          VALUES ('events_cursor', $1)
-          ON CONFLICT (state_key)
-          DO UPDATE SET state_value = EXCLUDED.state_value, updated_at = NOW()
-        `,
-        [cursor],
-      );
-    }
-
-    await client.query("COMMIT");
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
-  } finally {
-    client.release();
+    throw new Error("Failed to persist the event batch after retrying the transaction.");
   }
 }
 
-export async function listEvents(filters: PoolEventFilters) {
-  const limit = Math.min(filters.limit ?? 100, 200);
-  const params: Array<number> = [];
-  const where: string[] = [];
-
-  if (filters.groupId !== undefined) {
-    params.push(filters.groupId);
-    where.push(`group_id = $${params.length}`);
-  }
-
-  if (filters.poolId !== undefined) {
-    params.push(filters.poolId);
-    where.push(`pool_id = $${params.length}`);
-  }
-
-  const whereClause = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
-
-  params.push(limit);
-
-  const result = await pool.query<ContractEventRow>(
-    `
-      SELECT
-        event_id,
-        cursor,
-        contract_id,
-        source,
-        event_type,
-        group_id,
-        pool_id,
-        actor,
-        recipient,
-        amount,
-        tx_hash,
-        ledger,
-        occurred_at,
-        payload
-      FROM contract_events
-      ${whereClause}
-      ORDER BY ledger DESC, event_id DESC
-      LIMIT $${params.length}
-    `,
-    params,
-  );
-
-  return result.rows.map((row: ContractEventRow) => ({
-    eventId: String(row.event_id),
-    cursor: String(row.cursor),
-    contractId: String(row.contract_id),
-    source: row.source as "core" | "rewards",
-    eventType: String(row.event_type),
-    groupId: row.group_id === null ? null : Number(row.group_id),
-    poolId: row.pool_id === null ? null : Number(row.pool_id),
-    actor: row.actor === null ? null : String(row.actor),
-    recipient: row.recipient === null ? null : String(row.recipient),
-    amount: row.amount === null ? null : String(row.amount),
-    txHash: String(row.tx_hash),
-    ledger: Number(row.ledger),
-    occurredAt: new Date(row.occurred_at as string | Date).toISOString(),
-    payload: row.payload as NormalizedContractEvent["payload"],
-  })) satisfies NormalizedContractEvent[];
-}
-
-export async function getDatabaseHealth() {
-  const result = await pool.query<{ now: string }>("SELECT NOW()::text AS now");
-  return result.rows[0]?.now ?? null;
-}
+export const eventStore = new PrismaEventStore();

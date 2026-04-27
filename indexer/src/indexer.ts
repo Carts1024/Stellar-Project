@@ -1,18 +1,54 @@
 import { EventEmitter } from "node:events";
+import { z } from "zod";
 import { indexerConfig, trackedContractIds } from "./config.js";
-import { getStoredCursor, storeEventBatch } from "./db.js";
+import type { EventIngestionStore } from "./db.js";
 import { normalizeRpcEvent } from "./normalize-event.js";
-import type { NormalizedContractEvent, RpcEventsResponse } from "./types.js";
+import type { NormalizedContractEvent } from "./types.js";
 
-type JsonRpcResponse<T> = {
-  error?: {
-    message?: string;
-  };
-  result?: T;
+const jsonRpcEnvelopeSchema = z.object({
+  error: z
+    .object({
+      message: z.string().trim().min(1).optional(),
+    })
+    .optional(),
+  result: z.unknown().optional(),
+});
+
+const latestLedgerSchema = z.object({
+  sequence: z.number().int().positive(),
+});
+
+const rpcEventRecordSchema = z.object({
+  contractId: z.string().trim().min(1),
+  cursor: z.string().trim().min(1).optional(),
+  id: z.string().trim().min(1),
+  ledger: z.number().int().positive(),
+  ledgerClosedAt: z.string().datetime({ offset: true }),
+  pagingToken: z.string().trim().min(1).optional(),
+  topic: z.array(z.string().trim().min(1)),
+  txHash: z.string().trim().min(1),
+  type: z.string().trim().min(1),
+  value: z.string().trim().min(1),
+});
+
+const rpcEventsResponseSchema = z.object({
+  cursor: z.string().trim().min(1).optional(),
+  events: z.array(rpcEventRecordSchema),
+  latestLedger: z.number().int().positive(),
+});
+
+type TalambagIndexerDependencies = {
+  eventStore: EventIngestionStore;
+  fetchFn?: typeof fetch;
 };
 
-async function rpcRequest<T>(method: string, params: Record<string, unknown>) {
-  const response = await fetch(indexerConfig.INDEXER_STELLAR_RPC_URL, {
+async function rpcRequest<T>(
+  method: string,
+  params: Record<string, unknown>,
+  resultSchema: z.ZodType<T>,
+  fetchFn: typeof fetch,
+) {
+  const response = await fetchFn(indexerConfig.INDEXER_STELLAR_RPC_URL, {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -29,28 +65,28 @@ async function rpcRequest<T>(method: string, params: Record<string, unknown>) {
     throw new Error(`RPC returned HTTP ${response.status}`);
   }
 
-  const payload = (await response.json()) as JsonRpcResponse<T>;
+  const payload = jsonRpcEnvelopeSchema.parse(await response.json());
   if (payload.error) {
     throw new Error(payload.error.message ?? `RPC ${method} failed.`);
   }
 
-  if (!payload.result) {
+  if (payload.result === undefined) {
     throw new Error(`RPC ${method} returned no result.`);
   }
 
-  return payload.result;
+  return resultSchema.parse(payload.result);
 }
 
-async function getInitialStartLedger() {
+async function getInitialStartLedger(fetchFn: typeof fetch) {
   if (indexerConfig.INDEXER_START_LEDGER) {
     return indexerConfig.INDEXER_START_LEDGER;
   }
 
-  const latestLedger = await rpcRequest<{ sequence: number }>("getLatestLedger", {});
+  const latestLedger = await rpcRequest("getLatestLedger", {}, latestLedgerSchema, fetchFn);
   return Math.max(1, latestLedger.sequence - 20);
 }
 
-async function getEventsPage(cursor: string | null, startLedger: number | null) {
+async function getEventsPage(cursor: string | null, startLedger: number | null, fetchFn: typeof fetch) {
   const params: Record<string, unknown> = {
     filters: [
       {
@@ -73,15 +109,22 @@ async function getEventsPage(cursor: string | null, startLedger: number | null) 
     params.startLedger = startLedger;
   }
 
-  return rpcRequest<RpcEventsResponse>("getEvents", params);
+  return rpcRequest("getEvents", params, rpcEventsResponseSchema, fetchFn);
 }
 
 export class TalambagIndexer {
+  private readonly eventStore: EventIngestionStore;
   private readonly events = new EventEmitter();
+  private readonly fetchFn: typeof fetch;
   private isPolling = false;
   private lastPollAt: string | null = null;
   private lastError: string | null = null;
   private timer: NodeJS.Timeout | null = null;
+
+  constructor({ eventStore, fetchFn = fetch }: TalambagIndexerDependencies) {
+    this.eventStore = eventStore;
+    this.fetchFn = fetchFn;
+  }
 
   async start() {
     await this.poll();
@@ -118,12 +161,12 @@ export class TalambagIndexer {
     this.isPolling = true;
 
     try {
-      let cursor = await getStoredCursor();
-      let startLedger = cursor ? null : await getInitialStartLedger();
+      let cursor = await this.eventStore.getStoredCursor();
+      let startLedger = cursor ? null : await getInitialStartLedger(this.fetchFn);
       let shouldContinue = true;
 
       while (shouldContinue) {
-        const page = await getEventsPage(cursor, startLedger);
+        const page = await getEventsPage(cursor, startLedger, this.fetchFn);
         const normalized = page.events
           .map((event) => normalizeRpcEvent(event))
           .filter((event): event is NormalizedContractEvent => event !== null);
@@ -132,9 +175,12 @@ export class TalambagIndexer {
           page.cursor ?? page.events.at(-1)?.cursor ?? page.events.at(-1)?.pagingToken ?? cursor;
 
         if (normalized.length > 0 || nextCursor !== cursor) {
-          await storeEventBatch(normalized, nextCursor ?? null);
+          const { insertedEvents } = await this.eventStore.storeEventBatch({
+            events: normalized,
+            cursor: nextCursor ?? null,
+          });
 
-          for (const event of normalized) {
+          for (const event of insertedEvents) {
             this.events.emit("contract-event", event);
           }
         }
