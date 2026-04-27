@@ -35,6 +35,7 @@ export type PoolSummary = {
 };
 
 export type PoolEvent = {
+  eventId?: string;
   type: "deposit" | "withdraw";
   from: string;
   to?: string;
@@ -50,6 +51,24 @@ export type ContractSnapshot = {
   group: GroupSummary | null;
   pool: PoolSummary | null;
   isWalletMember: boolean | null;
+  error?: string;
+};
+
+export type RewardTokenMetadata = {
+  name: string;
+  symbol: string;
+  decimals: number;
+};
+
+export type RewardSnapshot = {
+  status: ContractStatus;
+  groupId: number | null;
+  walletAddress: string | null;
+  metadata: RewardTokenMetadata | null;
+  balance: bigint;
+  pendingReward: bigint;
+  contributedAmount: bigint;
+  totalSupply: bigint;
   error?: string;
 };
 

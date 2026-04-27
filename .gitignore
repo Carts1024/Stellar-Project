@@ -5,3 +5,5 @@ contracts/target
 /frontend/tsconfig.tsbuildinfo
 /frontend/.env
 /frontend/.env*.local
+/indexer/node_modules
+/indexer/dist

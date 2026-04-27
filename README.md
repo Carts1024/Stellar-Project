@@ -113,11 +113,17 @@ Talambag is split into two layers:
 │        Next.js Frontend     │  React 19 · TypeScript · pnpm
 │  (Vercel-deployed SPA/SSR)  │
 └────────────┬────────────────┘
-             │  @stellar/stellar-sdk  +  stellar-wallets-kit
+             │  @stellar/stellar-sdk + stellar-wallets-kit + EventSource
              ▼
 ┌─────────────────────────────┐
-│   Stellar Soroban Testnet   │  Soroban RPC  ·  Horizon
-│   TalambagContract (WASM)   │  Rust · soroban-sdk 22
+│      Talambag Indexer       │  Express · TypeScript · Neon Postgres
+│  Polls RPC, stores events,  │  serves history + realtime SSE
+└────────────┬────────────────┘
+             │  Stellar RPC getEvents
+             ▼
+┌─────────────────────────────┐
+│   Stellar Soroban Testnet   │  Soroban RPC · Horizon
+│ Talambag Core + Rewards WASM│  Rust · soroban-sdk 22
 └─────────────────────────────┘
 ```
 
@@ -126,9 +132,10 @@ Talambag is split into two layers:
 1. A **group owner** creates a group on-chain, choosing a name and the Stellar asset used for contributions. The owner is automatically the first member.
 2. The owner **adds wallet addresses** as members. Only members can interact with pools inside the group.
 3. Any member can **create a pool** with a name. The wallet that creates the pool becomes its **organizer**.
-4. Group members **deposit** tokens into a pool. The contract holds the balance in escrow.
-5. The pool **organizer** can **withdraw** any amount to any Stellar address they choose.
-6. Every deposit and withdrawal emits an **on-chain event** that the frontend reads via the Stellar Expert API.
+4. Group members **deposit** tokens into a pool. The core contract keeps pooled funds in escrow and forwards contribution data to the rewards contract.
+5. The rewards contract tracks **claimable reward tokens** for each contributor. Claiming rewards calls back into Talambag core to verify group membership before minting tokens.
+6. The pool **organizer** can **withdraw** any amount to any Stellar address they choose.
+7. Both contracts emit **on-chain events** that a separate indexer normalizes into Neon PostgreSQL and streams to the frontend in real time.
 
 ### Problem It Solves
 
@@ -142,11 +149,15 @@ Talambag gives the group a smart-contract-backed source of truth. Balances are h
 
 ```
 Stellar-Project/
-├── contracts/                  # Soroban smart contract (Rust)
+├── contracts/                  # Soroban smart contracts (Rust workspace)
 │   ├── Cargo.toml
 │   └── src/
-│       ├── lib.rs              # Contract logic
-│       └── test.rs             # Unit and integration tests
+│       ├── lib.rs              # Talambag core contract logic
+│       └── test.rs             # Cross-contract unit tests
+│   └── rewards/
+│       ├── Cargo.toml
+│       └── src/
+│           └── lib.rs          # Reward/governance token contract
 └── frontend/                   # Next.js 15 web application
     ├── package.json
     ├── next.config.ts
@@ -183,11 +194,23 @@ Stellar-Project/
         └── lib/
             ├── config.ts           # App-wide config from environment variables
             ├── talambag-client.ts  # All Soroban RPC calls and signing logic
+          ├── rewards-client.ts   # Reward token reads and claim actions
+          ├── realtime-events.ts  # Indexer-backed event history + SSE helpers
             ├── wallet-kit.ts       # Stellar Wallets Kit initialization and helpers
             ├── types.ts            # Shared TypeScript types
             ├── format.ts           # Amount formatting and address shortening
             ├── validators.ts       # Stellar address and text validation
             └── cache.ts            # 30-second TTL in-memory cache for RPC reads
+    └── indexer/                    # Realtime event ingestion service
+      ├── package.json
+      ├── tsconfig.json
+      ├── .env.example
+      └── src/
+        ├── server.ts           # HTTP API + SSE stream
+        ├── indexer.ts          # RPC polling loop
+        ├── normalize-event.ts  # Soroban event decoding
+        ├── db.ts               # Neon/Postgres persistence
+        └── config.ts           # Environment parsing
 ```
 
 ---
@@ -485,14 +508,27 @@ NEXT_PUBLIC_STELLAR_RPC_URL=https://soroban-testnet.stellar.org
 NEXT_PUBLIC_STELLAR_NETWORK=TESTNET
 NEXT_PUBLIC_STELLAR_NETWORK_PASSPHRASE=Test SDF Network ; September 2015
 NEXT_PUBLIC_TALAMBAG_CONTRACT_ID=CD44KFLGE2ISRUD6Q5BZTX3NI4ILTD5QUIWIED255UJDRAFJSR7GYIJE
+NEXT_PUBLIC_TALAMBAG_REWARDS_CONTRACT_ID=<DEPLOYED_REWARDS_CONTRACT_ID>
 NEXT_PUBLIC_TALAMBAG_ASSET_ADDRESS=CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC
 NEXT_PUBLIC_TALAMBAG_ASSET_CODE=XLM
 NEXT_PUBLIC_TALAMBAG_ASSET_DECIMALS=7
 NEXT_PUBLIC_STELLAR_EXPLORER_URL=https://stellar.expert/explorer/testnet
 NEXT_PUBLIC_STELLAR_READ_ADDRESS=<FUNDED_TESTNET_WALLET_ADDRESS>
+NEXT_PUBLIC_TALAMBAG_INDEXER_URL=http://localhost:8080
 ```
 
-### Step 6 — Start the development server
+### Step 6 — Configure and start the realtime indexer
+
+```bash
+cd indexer
+cp .env.example .env
+pnpm install
+pnpm dev
+```
+
+Populate `indexer/.env` with your Neon connection string, Talambag core contract ID, rewards contract ID, and the RPC endpoint you want to poll.
+
+### Step 7 — Start the development server
 
 ```bash
 cd frontend
@@ -511,12 +547,27 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 | `NEXT_PUBLIC_STELLAR_NETWORK` | Yes | Network name: `TESTNET` or `PUBLIC`. |
 | `NEXT_PUBLIC_STELLAR_NETWORK_PASSPHRASE` | Yes | Network passphrase string. |
 | `NEXT_PUBLIC_TALAMBAG_CONTRACT_ID` | Yes | The deployed Soroban contract address. |
+| `NEXT_PUBLIC_TALAMBAG_REWARDS_CONTRACT_ID` | Yes | The deployed Soroban rewards token contract address. |
 | `NEXT_PUBLIC_TALAMBAG_ASSET_ADDRESS` | Yes | Stellar asset contract address used for contributions. |
 | `NEXT_PUBLIC_TALAMBAG_ASSET_CODE` | Yes | Human-readable asset code, e.g. `XLM`. |
 | `NEXT_PUBLIC_TALAMBAG_ASSET_DECIMALS` | Yes | Decimal places for the asset (`7` for XLM). |
 | `NEXT_PUBLIC_STELLAR_EXPLORER_URL` | Yes | Base URL for Stellar Expert, used for transaction and contract links. |
 | `NEXT_PUBLIC_STELLAR_READ_ADDRESS` | Yes | A funded testnet wallet address used as the fee source for read-only simulations. |
 | `NEXT_PUBLIC_STELLAR_HORIZON_URL` | No | Horizon server URL for XLM balance lookups. Defaults to `https://horizon-testnet.stellar.org`. |
+| `NEXT_PUBLIC_TALAMBAG_INDEXER_URL` | Yes for realtime streaming | Base URL of the separate Talambag indexer service, e.g. `http://localhost:8080`. |
+
+### Indexer Variables
+
+| Variable | Required | Description |
+|---|---|---|
+| `INDEXER_DATABASE_URL` | Yes | Neon Postgres connection string used to persist cursors and normalized events. |
+| `INDEXER_STELLAR_RPC_URL` | Yes | Stellar RPC endpoint that supports `getEvents`. |
+| `INDEXER_CORE_CONTRACT_ID` | Yes | Talambag core contract ID to index. |
+| `INDEXER_REWARD_CONTRACT_ID` | Yes | Rewards contract ID to index. |
+| `INDEXER_ALLOWED_ORIGIN` | Yes | CORS origin allowed to consume the SSE stream. |
+| `INDEXER_POLL_INTERVAL_MS` | No | Polling cadence in milliseconds. Defaults to `4000`. |
+| `INDEXER_BATCH_LIMIT` | No | Maximum events to fetch per `getEvents` request. Defaults to `200`. |
+| `INDEXER_START_LEDGER` | No | Optional ledger sequence to use for initial backfill. |
 
 ---
 
@@ -535,29 +586,57 @@ pnpm lint
 pnpm build
 ```
 
+From `indexer/`:
+
+```bash
+# Install dependencies once
+pnpm install
+
+# Strict type-check
+pnpm run typecheck
+
+# Production build
+pnpm run build
+```
+
 From `contracts/`:
 
 ```bash
 # Run all Soroban unit tests
-cargo test
+cargo test --workspace
 ```
 
 ---
 
 ## Deploying to Testnet
 
-### Smart Contract
+### Smart Contracts
 
 ```bash
-stellar contract deploy \
-  --wasm contracts/target/wasm32v1-none/release/talambag.wasm \
-  --source <YOUR_STELLAR_SECRET_KEY_OR_ALIAS> \
-  --network testnet
+# Build the core contract
+cd contracts
+stellar contract build
+
+# Build the rewards contract
+cd rewards
+stellar contract build
 ```
+
+The GitHub Actions workflow at `.github/workflows/ci-and-deploy.yml` runs on every pull request and on every push to `main`. On `main`, after all contract, frontend, and indexer checks pass, it automatically:
+
+1. deploys a fresh Talambag core contract to testnet,
+2. deploys a fresh rewards contract to testnet,
+3. links both contracts with `set_rewards_contract` and `set_core_contract`, and
+4. uploads a `deployment.env` artifact containing the new contract IDs.
+
+Configure these GitHub repository secrets before enabling automatic deployment:
+
+- `STELLAR_TESTNET_SECRET_KEY`
+- `STELLAR_TESTNET_ADMIN_ADDRESS`
 
 ### Frontend
 
-The frontend is deployed on [Vercel](https://vercel.com). Push to `main` to trigger a production deployment. Set all `NEXT_PUBLIC_*` environment variables in the Vercel project settings before deploying.
+The frontend is deployed on [Vercel](https://vercel.com). Push to `main` to trigger a production deployment. Set all `NEXT_PUBLIC_*` environment variables in the Vercel project settings before deploying, including the core contract ID, rewards contract ID, and indexer URL.
 
 ---
 

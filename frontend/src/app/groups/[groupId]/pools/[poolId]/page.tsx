@@ -8,14 +8,15 @@ import { FeedbackBanner } from "@/components/feedback-banner";
 import { DepositModal } from "@/components/deposit-modal";
 import { appConfig } from "@/lib/config";
 import { formatAmount, parseAmountToInt, shortenAddress } from "@/lib/format";
+import { fetchRealtimePoolEvents, subscribeToPoolEvents } from "@/lib/realtime-events";
+import { claimGroupRewards, getRewardSnapshot } from "@/lib/rewards-client";
 import {
-  fetchPoolEvents,
   getContractSnapshot,
   withdrawFromPool,
   TxError,
 } from "@/lib/talambag-client";
 import { isValidStellarAddress } from "@/lib/validators";
-import type { GroupSummary, PoolEvent, PoolSummary, TxFeedback } from "@/lib/types";
+import type { GroupSummary, PoolEvent, PoolSummary, RewardSnapshot, TxFeedback } from "@/lib/types";
 
 export default function PoolPage() {
   const params = useParams();
@@ -25,6 +26,7 @@ export default function PoolPage() {
 
   const [group, setGroup] = useState<GroupSummary | null>(null);
   const [pool, setPool] = useState<PoolSummary | null>(null);
+  const [rewardSnapshot, setRewardSnapshot] = useState<RewardSnapshot | null>(null);
   const [isMember, setIsMember] = useState(false);
   const [events, setEvents] = useState<PoolEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -36,23 +38,32 @@ export default function PoolPage() {
   const [withdrawRecipient, setWithdrawRecipient] = useState("");
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [isWithdrawing, setIsWithdrawing] = useState(false);
+  const [isClaimingRewards, setIsClaimingRewards] = useState(false);
 
   const isOrganizer = wallet.address !== null && pool !== null && wallet.address === pool.organizer;
   const isValidRecipient = withdrawRecipient.trim() ? isValidStellarAddress(withdrawRecipient) : false;
+  const rewardDecimals = rewardSnapshot?.metadata?.decimals ?? appConfig.assetDecimals;
+  const rewardSymbol = rewardSnapshot?.metadata?.symbol ?? "TLMBG";
 
   const loadPool = useCallback(async () => {
     setIsLoading(true);
+    setEventsLoading(true);
     try {
-      const snapshot = await getContractSnapshot(groupId, poolId, wallet.address);
+      const [snapshot, poolEvents, rewards] = await Promise.all([
+        getContractSnapshot(groupId, poolId, wallet.address),
+        fetchRealtimePoolEvents(groupId, poolId),
+        getRewardSnapshot(wallet.address, groupId),
+      ]);
+
       if (snapshot.group) setGroup(snapshot.group);
       if (snapshot.pool) setPool(snapshot.pool);
       setIsMember(snapshot.isWalletMember === true);
+      setRewardSnapshot(rewards);
 
       if (snapshot.error) {
         setFeedback({ state: "error", title: "Load error", detail: snapshot.error });
       }
 
-      const poolEvents = await fetchPoolEvents(groupId, poolId);
       setEvents(poolEvents);
       setEventsLoading(false);
     } catch (error) {
@@ -69,6 +80,32 @@ export default function PoolPage() {
 
   useEffect(() => {
     if (groupId && poolId) void loadPool();
+  }, [groupId, poolId, loadPool]);
+
+  useEffect(() => {
+    if (!groupId || !poolId) {
+      return;
+    }
+
+    return subscribeToPoolEvents(groupId, poolId, (event) => {
+      setEvents((current) => {
+        if (
+          current.some(
+            (existing) =>
+              existing.eventId === event.eventId ||
+              (existing.txHash === event.txHash &&
+                existing.type === event.type &&
+                existing.timestamp === event.timestamp),
+          )
+        ) {
+          return current;
+        }
+
+        return [event, ...current];
+      });
+
+      void loadPool();
+    });
   }, [groupId, poolId, loadPool]);
 
   async function handleWithdraw(e: React.FormEvent) {
@@ -117,6 +154,45 @@ export default function PoolPage() {
       });
     } finally {
       setIsWithdrawing(false);
+    }
+  }
+
+  async function handleClaimRewards() {
+    if (!wallet.address) return;
+
+    setIsClaimingRewards(true);
+    setFeedback({
+      state: "signing",
+      title: "Awaiting rewards claim signature",
+      detail: "Your selected wallet will confirm the reward-token claim.",
+    });
+
+    try {
+      const result = await claimGroupRewards(wallet.address, groupId, () =>
+        setFeedback({
+          state: "submitting",
+          title: "Claim submitted",
+          detail: "Waiting for the rewards contract to mint your tokens on-chain...",
+        }),
+      );
+
+      setFeedback({
+        state: "success",
+        title: "Rewards claimed",
+        detail: `${rewardSymbol} has been minted to your connected wallet.`,
+        hash: result.hash,
+      });
+
+      void loadPool();
+    } catch (error) {
+      const isRejected = error instanceof TxError && error.kind === "rejected";
+      setFeedback({
+        state: isRejected ? "rejected" : "error",
+        title: isRejected ? "Claim canceled" : "Claim failed",
+        detail: error instanceof Error ? error.message : "The rewards claim could not be submitted.",
+      });
+    } finally {
+      setIsClaimingRewards(false);
     }
   }
 
@@ -200,6 +276,66 @@ export default function PoolPage() {
       </section>
 
       <FeedbackBanner feedback={feedback} />
+
+      {rewardSnapshot ? (
+        <section className="withdraw-section">
+          <div className="card-head">
+            <span className="card-kicker">{rewardSnapshot.metadata?.name ?? "Rewards"}</span>
+            <h2>Contribution rewards</h2>
+          </div>
+          <p className="card-copy">
+            Deposits in this group accrue claimable reward tokens. Claiming calls the rewards
+            contract, which verifies your Talambag membership before minting tokens.
+          </p>
+          <div className="pool-info-header">
+            <article className="metric-card">
+              <span className="metric-label">Pending claim</span>
+              <strong className="metric-value">
+                {formatAmount(rewardSnapshot.pendingReward, rewardDecimals)} {rewardSymbol}
+              </strong>
+              <span className="metric-detail">Ready to mint</span>
+            </article>
+            <article className="metric-card">
+              <span className="metric-label">Wallet balance</span>
+              <strong className="metric-value">
+                {formatAmount(rewardSnapshot.balance, rewardDecimals)} {rewardSymbol}
+              </strong>
+              <span className="metric-detail">Claimed reward tokens</span>
+            </article>
+            <article className="metric-card">
+              <span className="metric-label">Your contribution</span>
+              <strong className="metric-value">
+                {formatAmount(rewardSnapshot.contributedAmount, rewardDecimals)} {rewardSymbol}
+              </strong>
+              <span className="metric-detail">Reward-weighted contribution total</span>
+            </article>
+            <article className="metric-card">
+              <span className="metric-label">Token supply</span>
+              <strong className="metric-value">
+                {formatAmount(rewardSnapshot.totalSupply, rewardDecimals)} {rewardSymbol}
+              </strong>
+              <span className="metric-detail">Minted across Talambag</span>
+            </article>
+          </div>
+          {rewardSnapshot.error ? <p className="field-hint error-text">{rewardSnapshot.error}</p> : null}
+          <div className="page-header-actions">
+            <button
+              className="primary-button"
+              onClick={() => void handleClaimRewards()}
+              disabled={
+                isClaimingRewards ||
+                !wallet.address ||
+                !wallet.isExpectedNetwork ||
+                !isMember ||
+                rewardSnapshot.pendingReward <= 0n ||
+                rewardSnapshot.status === "error"
+              }
+            >
+              {isClaimingRewards ? "Claiming..." : `Claim ${rewardSymbol}`}
+            </button>
+          </div>
+        </section>
+      ) : null}
 
       <a
         href={`${appConfig.explorerUrl}/contract/${appConfig.contractId}`}
@@ -320,15 +456,17 @@ export default function PoolPage() {
                           : undefined
                       }
                     >
-                      <td>
+                      <td data-label="Type">
                         <span className={`tx-badge ${event.type}`}>{event.type}</span>
                       </td>
-                      <td>{shortenAddress(event.from)}</td>
-                      <td>{event.to ? shortenAddress(event.to) : "—"}</td>
-                      <td>
+                      <td data-label="From">{shortenAddress(event.from)}</td>
+                      <td data-label="To">{event.to ? shortenAddress(event.to) : "—"}</td>
+                      <td data-label="Amount">
                         {formatAmount(event.amount, appConfig.assetDecimals)} {appConfig.assetCode}
                       </td>
-                      <td>{event.timestamp ? new Date(event.timestamp).toLocaleString() : "—"}</td>
+                      <td data-label="Date">
+                        {event.timestamp ? new Date(event.timestamp).toLocaleString() : "—"}
+                      </td>
                     </tr>
                   );
                 })}

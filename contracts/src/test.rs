@@ -4,6 +4,9 @@ extern crate std;
 
 use super::{Error, Group, Pool, TalambagContract, TalambagContractClient};
 use soroban_sdk::{symbol_short, testutils::Address as _, token, Address, Env, IntoVal, String};
+use talambag_rewards::{
+    Error as RewardError, RewardTokenContract, RewardTokenContractClient,
+};
 
 mod tests {
     use super::*;
@@ -13,7 +16,9 @@ mod tests {
     struct TestContext {
         env: Env,
         client: TalambagContractClient<'static>,
+        rewards_client: RewardTokenContractClient<'static>,
         token_client: token::Client<'static>,
+        contract_admin: Address,
         group_owner: Address,
         pool_creator: Address,
         contributor: Address,
@@ -30,6 +35,7 @@ mod tests {
         let env = Env::default();
         env.mock_all_auths();
 
+        let contract_admin = Address::generate(&env);
         let group_owner = Address::generate(&env);
         let pool_creator = Address::generate(&env);
         let contributor = Address::generate(&env);
@@ -45,13 +51,29 @@ mod tests {
         token_admin.mint(&contributor, &1_000);
         token_admin.mint(&outsider, &1_000);
 
-        let contract_id = env.register(TalambagContract, ());
+        let contract_id = env.register(TalambagContract, (&contract_admin,));
+        let rewards_id = env.register(
+            RewardTokenContract,
+            (
+                contract_admin.clone(),
+                text(&env, "Talambag Rewards"),
+                text(&env, "TLMBG"),
+                7u32,
+            ),
+        );
         let env_ref: &'static Env = Box::leak(Box::new(env));
+        let client = TalambagContractClient::new(env_ref, &contract_id);
+        let rewards_client = RewardTokenContractClient::new(env_ref, &rewards_id);
+
+        client.set_rewards_contract(&contract_admin, &rewards_id);
+        rewards_client.set_core_contract(&contract_admin, &contract_id);
 
         TestContext {
             env: env_ref.clone(),
-            client: TalambagContractClient::new(env_ref, &contract_id),
+            client,
+            rewards_client,
             token_client: token::Client::new(env_ref, &asset_address),
+            contract_admin,
             group_owner,
             pool_creator,
             contributor,
@@ -105,6 +127,12 @@ mod tests {
 
         assert_eq!(context.client.pool_balance(&group_id, &pool_id), 150);
         assert_eq!(context.token_client.balance(&context.recipient), 100);
+        assert_eq!(
+            context
+                .rewards_client
+                .pending_reward(&group_id, &context.contributor),
+            250
+        );
     }
 
     #[test]
@@ -184,6 +212,74 @@ mod tests {
     }
 
     #[test]
+    fn create_group_registers_the_group_with_the_rewards_contract() {
+        let context = setup();
+        let group_id = context.client.create_group(
+            &context.group_owner,
+            &text(&context.env, "Rewarded Group"),
+            &context.asset_address,
+        );
+
+        assert_eq!(context.client.admin(), context.contract_admin);
+        assert_eq!(context.client.rewards_contract(), Some(context.rewards_client.address.clone()));
+        assert_eq!(context.rewards_client.group_owner(&group_id), context.group_owner);
+    }
+
+    #[test]
+    fn contributors_can_claim_transfer_and_burn_reward_tokens() {
+        let context = setup();
+        let group_id = create_group_with_members(&context);
+        let pool_id = create_pool(&context, group_id);
+
+        context
+            .client
+            .deposit(&context.contributor, &group_id, &pool_id, &300);
+
+        assert_eq!(
+            context
+                .rewards_client
+                .contributed_amount(&group_id, &context.contributor),
+            300
+        );
+        assert_eq!(
+            context
+                .rewards_client
+                .group_total_contributed(&group_id),
+            300
+        );
+        assert_eq!(context.rewards_client.balance(&context.contributor), 0);
+
+        let claimed = context
+            .rewards_client
+            .claim_rewards(&context.contributor, &group_id);
+        assert_eq!(claimed, 300);
+        assert_eq!(context.rewards_client.balance(&context.contributor), 300);
+        assert_eq!(context.rewards_client.total_supply(), 300);
+
+        context
+            .rewards_client
+            .transfer(&context.contributor, &context.outsider, &120);
+        context.rewards_client.burn(&context.outsider, &20);
+
+        assert_eq!(context.rewards_client.balance(&context.contributor), 180);
+        assert_eq!(context.rewards_client.balance(&context.outsider), 100);
+        assert_eq!(context.rewards_client.total_supply(), 280);
+        assert_eq!(context.rewards_client.group_total_claimed(&group_id), 300);
+    }
+
+    #[test]
+    fn claim_requires_pending_rewards() {
+        let context = setup();
+        let group_id = create_group_with_members(&context);
+
+        let result = context
+            .rewards_client
+            .try_claim_rewards(&context.contributor, &group_id);
+
+        assert_eq!(result, Err(Ok(RewardError::NoRewardsAvailable)));
+    }
+
+    #[test]
     fn deposit_emits_event() {
         let context = setup();
         let group_id = create_group_with_members(&context);
@@ -194,11 +290,18 @@ mod tests {
             .deposit(&context.contributor, &group_id, &pool_id, &500);
 
         let events = context.env.events().all();
-        let last = events.last().unwrap();
+        let deposit_event = events
+            .iter()
+            .find(|event| {
+                event.0 == context.client.address
+                    && event.1
+                        == (symbol_short!("deposit"), group_id, pool_id).into_val(&context.env)
+            })
+            .unwrap();
 
-        assert_eq!(last.0, context.client.address);
+        assert_eq!(deposit_event.0, context.client.address);
         assert_eq!(
-            last.1,
+            deposit_event.1,
             (symbol_short!("deposit"), group_id, pool_id).into_val(&context.env)
         );
     }

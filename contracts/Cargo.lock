@@ -1427,6 +1427,14 @@ name = "talambag"
 version = "0.1.0"
 dependencies = [
  "soroban-sdk",
+ "talambag-rewards",
+]
+
+[[package]]
+name = "talambag-rewards"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk",
 ]
 
 [[package]]

@@ -38,6 +38,10 @@ input {
   font: inherit;
 }
 
+button {
+  touch-action: manipulation;
+}
+
 a {
   color: inherit;
 }
@@ -142,6 +146,7 @@ a {
   border: 0;
   border-radius: 999px;
   padding: 14px 20px;
+  min-height: 44px;
   cursor: pointer;
   transition:
     transform 160ms ease,
@@ -283,6 +288,8 @@ a {
 .stack-form input {
   width: 100%;
   padding: 14px 16px;
+  min-height: 44px;
+  font-size: 16px;
   border-radius: 18px;
   border: 1px solid rgba(23, 37, 31, 0.12);
   background: rgba(255, 255, 255, 0.76);
@@ -704,6 +711,8 @@ a {
 .search-input {
   width: 100%;
   padding: 14px 16px 14px 44px;
+  min-height: 44px;
+  font-size: 16px;
   border-radius: 18px;
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.76);
@@ -937,6 +946,10 @@ a {
   outline-offset: -2px;
 }
 
+.tx-table td::before {
+  display: none;
+}
+
 /* ── Withdraw Section ──────────────────────────────────── */
 
 .withdraw-section {
@@ -1059,8 +1072,131 @@ a {
     align-items: flex-start;
   }
 
+  .navbar-actions,
+  .navbar-actions > * {
+    width: 100%;
+  }
+
+  .wb-root,
+  .wb-connect-btn,
+  .wb-account-btn {
+    width: 100%;
+  }
+
+  .wb-connect-btn,
+  .wb-account-btn {
+    justify-content: center;
+  }
+
+  .page-header-actions {
+    width: 100%;
+  }
+
+  .page-header-actions > * {
+    flex: 1 1 100%;
+  }
+
   .pool-info-header {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .tx-table thead {
+    display: none;
+  }
+
+  .tx-table,
+  .tx-table tbody,
+  .tx-table tr,
+  .tx-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .tx-table tr {
+    padding: 14px 16px;
+    margin-bottom: 12px;
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.62);
+  }
+
+  .tx-table td {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(23, 37, 31, 0.08);
+    text-align: right;
+  }
+
+  .tx-table td:last-child {
+    border-bottom: 0;
+    padding-bottom: 0;
+  }
+
+  .tx-table td::before {
+    content: attr(data-label);
+    display: inline-block;
+    font-size: 0.74rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    text-align: left;
+  }
+}
+
+@media (max-width: 560px) {
+  .hero {
+    padding: 22px 18px;
+    border-radius: 26px;
+  }
+
+  .modal-backdrop {
+    align-items: flex-end;
+    padding-top: 16px;
+  }
+
+  .modal-panel {
+    width: 100%;
+    max-width: none;
+    max-height: 92vh;
+    padding: 22px 16px 28px;
+    border-radius: 24px 24px 0 0;
+  }
+
+  .withdraw-section,
+  .metric-card,
+  .action-card,
+  .group-card,
+  .pool-card,
+  .feedback-card,
+  .notice-card {
+    padding: 18px;
+  }
+}
+
+@media (max-width: 420px) {
+  .page-shell {
+    padding: 18px 12px 48px;
+  }
+
+  .navbar {
+    padding: 12px 12px 0;
+  }
+
+  .navbar-brand {
+    font-size: 1.2rem;
+  }
+
+  .hero h1 {
+    font-size: clamp(2rem, 12vw, 2.8rem);
+  }
+
+  .metric-value.address {
+    font-size: 0.98rem;
   }
 }
 
