@@ -4,9 +4,7 @@ extern crate std;
 
 use super::{Error, Group, Pool, TalambagContract, TalambagContractClient};
 use soroban_sdk::{symbol_short, testutils::Address as _, token, Address, Env, IntoVal, String};
-use talambag_rewards::{
-    Error as RewardError, RewardTokenContract, RewardTokenContractClient,
-};
+use talambag_rewards::{RewardTokenContract, RewardTokenContractClient};
 
 mod tests {
     use super::*;
@@ -127,12 +125,6 @@ mod tests {
 
         assert_eq!(context.client.pool_balance(&group_id, &pool_id), 150);
         assert_eq!(context.token_client.balance(&context.recipient), 100);
-        assert_eq!(
-            context
-                .rewards_client
-                .pending_reward(&group_id, &context.contributor),
-            250
-        );
     }
 
     #[test]
@@ -223,60 +215,6 @@ mod tests {
         assert_eq!(context.client.admin(), context.contract_admin);
         assert_eq!(context.client.rewards_contract(), Some(context.rewards_client.address.clone()));
         assert_eq!(context.rewards_client.group_owner(&group_id), context.group_owner);
-    }
-
-    #[test]
-    fn contributors_can_claim_transfer_and_burn_reward_tokens() {
-        let context = setup();
-        let group_id = create_group_with_members(&context);
-        let pool_id = create_pool(&context, group_id);
-
-        context
-            .client
-            .deposit(&context.contributor, &group_id, &pool_id, &300);
-
-        assert_eq!(
-            context
-                .rewards_client
-                .contributed_amount(&group_id, &context.contributor),
-            300
-        );
-        assert_eq!(
-            context
-                .rewards_client
-                .group_total_contributed(&group_id),
-            300
-        );
-        assert_eq!(context.rewards_client.balance(&context.contributor), 0);
-
-        let claimed = context
-            .rewards_client
-            .claim_rewards(&context.contributor, &group_id);
-        assert_eq!(claimed, 300);
-        assert_eq!(context.rewards_client.balance(&context.contributor), 300);
-        assert_eq!(context.rewards_client.total_supply(), 300);
-
-        context
-            .rewards_client
-            .transfer(&context.contributor, &context.outsider, &120);
-        context.rewards_client.burn(&context.outsider, &20);
-
-        assert_eq!(context.rewards_client.balance(&context.contributor), 180);
-        assert_eq!(context.rewards_client.balance(&context.outsider), 100);
-        assert_eq!(context.rewards_client.total_supply(), 280);
-        assert_eq!(context.rewards_client.group_total_claimed(&group_id), 300);
-    }
-
-    #[test]
-    fn claim_requires_pending_rewards() {
-        let context = setup();
-        let group_id = create_group_with_members(&context);
-
-        let result = context
-            .rewards_client
-            .try_claim_rewards(&context.contributor, &group_id);
-
-        assert_eq!(result, Err(Ok(RewardError::NoRewardsAvailable)));
     }
 
     #[test]

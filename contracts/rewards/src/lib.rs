@@ -397,3 +397,6 @@ impl RewardTokenContract {
         left.checked_sub(right).ok_or(Error::ArithmeticOverflow)
     }
 }
+
+#[cfg(test)]
+mod test;
