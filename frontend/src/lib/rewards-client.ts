@@ -19,6 +19,27 @@ type ContractArg = {
   type: "address" | "i128" | "u32" | "string";
 };
 
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isGroupNotRegisteredError(error: unknown) {
+  const lower = getErrorMessage(error).toLowerCase();
+  return (
+    lower.includes("#4") ||
+    lower.includes("groupnotregistered") ||
+    lower.includes("does not know about this group yet")
+  );
+}
+
+function isMissingContractFunctionError(error: unknown, method: string) {
+  const lower = getErrorMessage(error).toLowerCase();
+  return (
+    lower.includes("trying to invoke non-existent contract function") &&
+    lower.includes(method.toLowerCase())
+  );
+}
+
 function getServer() {
   return new rpc.Server(appConfig.rpcUrl, {
     allowHttp: appConfig.rpcUrl.startsWith("http://"),
@@ -34,7 +55,7 @@ function ensureRewardsConfigured() {
 }
 
 function normalizeRewardsError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = getErrorMessage(error);
   const lower = message.toLowerCase();
 
   const kind = classifyError(error);
@@ -319,13 +340,39 @@ async function readContributedAmount(groupId: number, walletAddress: string) {
   return result;
 }
 
-async function readGroupRegistration(groupId: number) {
+async function readGroupOwner(groupId: number) {
   return simulateRead(
     getReadAddress(),
-    "is_group_registered",
+    "group_owner",
     buildArgs([{ value: groupId, type: "u32" }]),
-    normalizeBoolean,
+    normalizeString,
   );
+}
+
+async function readGroupRegistration(groupId: number) {
+  try {
+    return await simulateRead(
+      getReadAddress(),
+      "is_group_registered",
+      buildArgs([{ value: groupId, type: "u32" }]),
+      normalizeBoolean,
+    );
+  } catch (error) {
+    if (!isMissingContractFunctionError(error, "is_group_registered")) {
+      throw error;
+    }
+
+    try {
+      await readGroupOwner(groupId);
+      return true;
+    } catch (fallbackError) {
+      if (isGroupNotRegisteredError(fallbackError)) {
+        return false;
+      }
+
+      throw fallbackError;
+    }
+  }
 }
 
 async function readTotalSupply() {
