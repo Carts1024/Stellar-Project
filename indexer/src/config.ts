@@ -1,28 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { parseEnv } from "node:util";
 import { z } from "zod";
-
-const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-
-function loadLocalEnvironmentFile(fileName: ".env" | ".env.local") {
-  const filePath = resolve(projectRoot, fileName);
-
-  if (!existsSync(filePath)) {
-    return;
-  }
-
-  const fileEnvironment = parseEnv(readFileSync(filePath, "utf8"));
-
-  for (const [key, value] of Object.entries(fileEnvironment)) {
-    const currentValue = process.env[key];
-
-    if (currentValue === undefined || currentValue.trim() === "") {
-      process.env[key] = value;
-    }
-  }
-}
+import { loadProjectEnvironment } from "./load-env.js";
 
 function emptyStringToUndefined(value: unknown) {
   if (typeof value === "string" && value.trim() === "") {
@@ -32,8 +9,7 @@ function emptyStringToUndefined(value: unknown) {
   return value;
 }
 
-loadLocalEnvironmentFile(".env.local");
-loadLocalEnvironmentFile(".env");
+loadProjectEnvironment();
 
 const requiredEnvString = z.string().trim().min(1);
 const optionalPositiveInt = z.preprocess(
