@@ -6,7 +6,7 @@ Instead of collecting money through opaque chat threads and manually tracking wh
 
 ## Demo Video
 
-<iframe width="560" height="315" src="https://drive.google.com/file/d/1QgDBnBEA3MAql2b_HV0pdgDzF8tW-yay/preview" allow="autoplay"></iframe>
+[![Watch the Talambag Demo](https://img.youtube.com/vi/Y03vvhb_GjQ/maxresdefault.jpg)](https://www.youtube.com/watch?v=Y03vvhb_GjQ)
 
 ## UI Screenshots
 
