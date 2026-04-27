@@ -4,7 +4,7 @@ import {
   DEFAULT_EVENT_LIST_LIMIT,
   MAX_EVENT_LIST_LIMIT,
 } from "./types.js";
-import type { JsonValue, NormalizedContractEvent, PoolEventFilters } from "./types.js";
+import type { ContractEventFilters, JsonValue, NormalizedContractEvent } from "./types.js";
 
 const EVENTS_CURSOR_STATE_KEY = "events_cursor";
 const SERIALIZABLE_RETRY_LIMIT = 3;
@@ -51,7 +51,7 @@ export interface EventIngestionStore {
 }
 
 export interface EventQueryStore {
-  listEvents(filters: PoolEventFilters): Promise<NormalizedContractEvent[]>;
+  listEvents(filters: ContractEventFilters): Promise<NormalizedContractEvent[]>;
 }
 
 export interface DatabaseHealthStore {
@@ -185,9 +185,10 @@ export class PrismaEventStore implements EventStore {
     };
   }
 
-  async listEvents(filters: PoolEventFilters) {
+  async listEvents(filters: ContractEventFilters) {
     const events = await this.client.contractEvent.findMany({
       where: {
+        eventType: filters.eventTypes ? { in: [...filters.eventTypes] } : undefined,
         groupId: filters.groupId,
         poolId: filters.poolId,
       },

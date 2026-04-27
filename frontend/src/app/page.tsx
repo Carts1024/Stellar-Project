@@ -1,14 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useWallet } from "@/contexts/wallet-context";
 import { FeedbackBanner } from "@/components/feedback-banner";
 import { SearchBar } from "@/components/search-bar";
 import { CreateGroupModal } from "@/components/create-group-modal";
 import { formatXlmBalance, shortenAddress } from "@/lib/format";
+import {
+  invalidateDashboardCachesForEvent,
+  subscribeToContractEvents,
+} from "@/lib/realtime-events";
 import { listGroups, readGroupCount } from "@/lib/talambag-client";
-import type { GroupSummary, TxFeedback } from "@/lib/types";
+import {
+  DASHBOARD_REALTIME_EVENT_TYPES,
+  type GroupSummary,
+  type TxFeedback,
+} from "@/lib/types";
 
 export default function DashboardPage() {
   const { wallet } = useWallet();
@@ -18,9 +26,13 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [feedback, setFeedback] = useState<TxFeedback>({ state: "idle", title: "" });
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const loadGroups = useCallback(async () => {
-    setIsLoading(true);
+  const loadGroups = useCallback(async ({ showLoading = true }: { showLoading?: boolean } = {}) => {
+    if (showLoading) {
+      setIsLoading(true);
+    }
+
     try {
       const [fetched, count] = await Promise.all([listGroups(), readGroupCount()]);
       setGroups(fetched);
@@ -28,13 +40,44 @@ export default function DashboardPage() {
     } catch {
       // leave groups empty
     } finally {
-      setIsLoading(false);
+      if (showLoading) {
+        setIsLoading(false);
+      }
     }
   }, []);
+
+  const scheduleRealtimeRefresh = useCallback(() => {
+    if (refreshTimerRef.current !== null) {
+      clearTimeout(refreshTimerRef.current);
+    }
+
+    refreshTimerRef.current = setTimeout(() => {
+      refreshTimerRef.current = null;
+      void loadGroups({ showLoading: false });
+    }, 250);
+  }, [loadGroups]);
 
   useEffect(() => {
     void loadGroups();
   }, [loadGroups]);
+
+  useEffect(() => {
+    return () => {
+      if (refreshTimerRef.current !== null) {
+        clearTimeout(refreshTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    return subscribeToContractEvents(
+      { eventTypes: DASHBOARD_REALTIME_EVENT_TYPES },
+      (event) => {
+        invalidateDashboardCachesForEvent(event);
+        scheduleRealtimeRefresh();
+      },
+    );
+  }, [scheduleRealtimeRefresh]);
 
   const searchLower = search.toLowerCase().trim();
   const filteredGroups = searchLower

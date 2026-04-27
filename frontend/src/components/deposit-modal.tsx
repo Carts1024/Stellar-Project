@@ -6,6 +6,7 @@ import { FeedbackBanner } from "@/components/feedback-banner";
 import { useWallet } from "@/contexts/wallet-context";
 import { appConfig } from "@/lib/config";
 import { parseAmountToInt } from "@/lib/format";
+import { invalidateRewardSnapshotCaches } from "@/lib/rewards-client";
 import { TxError, depositToPool } from "@/lib/talambag-client";
 import type { TxFeedback } from "@/lib/types";
 
@@ -74,6 +75,7 @@ export function DepositModal({
       setFeedback(successFeedback);
       onSuccessFeedback(successFeedback);
 
+      invalidateRewardSnapshotCaches(groupId, wallet.address);
       setAmount("");
       onDeposited();
       handleClose();

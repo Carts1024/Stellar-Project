@@ -18,3 +18,23 @@ export function requireText(value: string, label: string) {
 
   return normalized;
 }
+
+export function parsePositiveIntegerParam(value: string | string[] | undefined) {
+  const normalized = Array.isArray(value) ? value[0] : value;
+
+  if (typeof normalized !== "string") {
+    return null;
+  }
+
+  const trimmed = normalized.trim();
+  if (!/^\d+$/.test(trimmed)) {
+    return null;
+  }
+
+  const parsed = Number.parseInt(trimmed, 10);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    return null;
+  }
+
+  return parsed;
+}

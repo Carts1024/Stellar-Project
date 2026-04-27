@@ -6,13 +6,13 @@ import { indexerConfig } from "./config.js";
 import { eventStore } from "./db.js";
 import { TalambagIndexer } from "./indexer.js";
 import { parseEventListFilters, parseEventStreamFilters } from "./request-schemas.js";
+import type { ContractEventFilters } from "./types.js";
 import type { NormalizedContractEvent } from "./types.js";
-import type { PoolEventFilters } from "./types.js";
 
 const app = express();
 const indexer = new TalambagIndexer({ eventStore });
 
-type StreamFilters = Readonly<Pick<PoolEventFilters, "groupId" | "poolId">>;
+type StreamFilters = Readonly<Pick<ContractEventFilters, "eventTypes" | "groupId" | "poolId">>;
 
 type StreamClient = {
   filters: StreamFilters;
@@ -25,6 +25,10 @@ let server: HttpServer | null = null;
 let isShuttingDown = false;
 
 function matchesFilters(event: NormalizedContractEvent, filters: StreamFilters) {
+  if (filters.eventTypes && !filters.eventTypes.includes(event.eventType)) {
+    return false;
+  }
+
   if (filters.groupId !== undefined && event.groupId !== filters.groupId) {
     return false;
   }

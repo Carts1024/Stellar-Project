@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useWallet } from "@/contexts/wallet-context";
@@ -8,20 +8,38 @@ import { FeedbackBanner } from "@/components/feedback-banner";
 import { DepositModal } from "@/components/deposit-modal";
 import { appConfig } from "@/lib/config";
 import { formatAmount, parseAmountToInt, shortenAddress } from "@/lib/format";
-import { fetchRealtimePoolEvents, subscribeToPoolEvents } from "@/lib/realtime-events";
-import { claimGroupRewards, getRewardSnapshot } from "@/lib/rewards-client";
+import {
+  appendUniquePoolEvent,
+  fetchContractEvents,
+  invalidatePoolCachesForEvent,
+  subscribeToContractEvents,
+  toPoolEvent,
+  toPoolEvents,
+} from "@/lib/realtime-events";
+import {
+  claimGroupRewards,
+  getRewardSnapshot,
+  invalidateRewardSnapshotCaches,
+} from "@/lib/rewards-client";
 import {
   getContractSnapshot,
   withdrawFromPool,
   TxError,
 } from "@/lib/talambag-client";
-import { isValidStellarAddress } from "@/lib/validators";
-import type { GroupSummary, PoolEvent, PoolSummary, RewardSnapshot, TxFeedback } from "@/lib/types";
+import { isValidStellarAddress, parsePositiveIntegerParam } from "@/lib/validators";
+import {
+  POOL_ACTIVITY_REALTIME_EVENT_TYPES,
+  type GroupSummary,
+  type PoolEvent,
+  type PoolSummary,
+  type RewardSnapshot,
+  type TxFeedback,
+} from "@/lib/types";
 
 export default function PoolPage() {
   const params = useParams();
-  const groupId = Number(params.groupId);
-  const poolId = Number(params.poolId);
+  const groupId = parsePositiveIntegerParam(params.groupId);
+  const poolId = parsePositiveIntegerParam(params.poolId);
   const { wallet } = useWallet();
 
   const [group, setGroup] = useState<GroupSummary | null>(null);
@@ -29,10 +47,11 @@ export default function PoolPage() {
   const [rewardSnapshot, setRewardSnapshot] = useState<RewardSnapshot | null>(null);
   const [isMember, setIsMember] = useState(false);
   const [events, setEvents] = useState<PoolEvent[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [eventsLoading, setEventsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(groupId !== null && poolId !== null);
+  const [eventsLoading, setEventsLoading] = useState(groupId !== null && poolId !== null);
   const [showDeposit, setShowDeposit] = useState(false);
   const [feedback, setFeedback] = useState<TxFeedback>({ state: "idle", title: "" });
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Withdraw form state
   const [withdrawRecipient, setWithdrawRecipient] = useState("");
@@ -45,72 +64,134 @@ export default function PoolPage() {
   const rewardDecimals = rewardSnapshot?.metadata?.decimals ?? appConfig.assetDecimals;
   const rewardSymbol = rewardSnapshot?.metadata?.symbol ?? "TLMBG";
 
-  const loadPool = useCallback(async () => {
-    setIsLoading(true);
-    setEventsLoading(true);
-    try {
-      const [snapshot, poolEvents, rewards] = await Promise.all([
-        getContractSnapshot(groupId, poolId, wallet.address),
-        fetchRealtimePoolEvents(groupId, poolId),
-        getRewardSnapshot(wallet.address, groupId),
-      ]);
-
-      if (snapshot.group) setGroup(snapshot.group);
-      if (snapshot.pool) setPool(snapshot.pool);
-      setIsMember(snapshot.isWalletMember === true);
-      setRewardSnapshot(rewards);
-
-      if (snapshot.error) {
-        setFeedback({ state: "error", title: "Load error", detail: snapshot.error });
+  const loadPool = useCallback(
+    async (
+      {
+        showEventsLoading = true,
+        showLoading = true,
+      }: { showEventsLoading?: boolean; showLoading?: boolean } = {},
+    ) => {
+      if (groupId === null || poolId === null) {
+        setGroup(null);
+        setPool(null);
+        setRewardSnapshot(null);
+        setIsMember(false);
+        setEvents([]);
+        setIsLoading(false);
+        setEventsLoading(false);
+        return;
       }
 
-      setEvents(poolEvents);
-      setEventsLoading(false);
-    } catch (error) {
-      setFeedback({
-        state: "error",
-        title: "Error",
-        detail: error instanceof Error ? error.message : "Failed to load pool.",
-      });
-      setEventsLoading(false);
-    } finally {
-      setIsLoading(false);
+      if (showLoading) {
+        setIsLoading(true);
+      }
+
+      if (showEventsLoading) {
+        setEventsLoading(true);
+      }
+
+      try {
+        const [snapshot, realtimeEvents, rewards] = await Promise.all([
+          getContractSnapshot(groupId, poolId, wallet.address),
+          fetchContractEvents({
+            eventTypes: POOL_ACTIVITY_REALTIME_EVENT_TYPES,
+            groupId,
+            limit: 200,
+            poolId,
+          }),
+          getRewardSnapshot(wallet.address, groupId),
+        ]);
+
+        if (snapshot.group) setGroup(snapshot.group);
+        if (snapshot.pool) setPool(snapshot.pool);
+        setIsMember(snapshot.isWalletMember === true);
+        setRewardSnapshot(rewards);
+
+        if (snapshot.error) {
+          setFeedback({ state: "error", title: "Load error", detail: snapshot.error });
+        }
+
+        setEvents(toPoolEvents(realtimeEvents));
+      } catch (error) {
+        setFeedback({
+          state: "error",
+          title: "Error",
+          detail: error instanceof Error ? error.message : "Failed to load pool.",
+        });
+      } finally {
+        if (showLoading) {
+          setIsLoading(false);
+        }
+
+        if (showEventsLoading) {
+          setEventsLoading(false);
+        }
+      }
+    },
+    [groupId, poolId, wallet.address],
+  );
+
+  const scheduleRealtimeRefresh = useCallback(() => {
+    if (refreshTimerRef.current !== null) {
+      clearTimeout(refreshTimerRef.current);
     }
-  }, [groupId, poolId, wallet.address]);
+
+    refreshTimerRef.current = setTimeout(() => {
+      refreshTimerRef.current = null;
+      void loadPool({ showEventsLoading: false, showLoading: false });
+    }, 250);
+  }, [loadPool]);
 
   useEffect(() => {
-    if (groupId && poolId) void loadPool();
-  }, [groupId, poolId, loadPool]);
-
-  useEffect(() => {
-    if (!groupId || !poolId) {
+    if (groupId !== null && poolId !== null) {
+      void loadPool();
       return;
     }
 
-    return subscribeToPoolEvents(groupId, poolId, (event) => {
-      setEvents((current) => {
-        if (
-          current.some(
-            (existing) =>
-              existing.eventId === event.eventId ||
-              (existing.txHash === event.txHash &&
-                existing.type === event.type &&
-                existing.timestamp === event.timestamp),
-          )
-        ) {
-          return current;
+    setGroup(null);
+    setPool(null);
+    setRewardSnapshot(null);
+    setIsMember(false);
+    setEvents([]);
+    setIsLoading(false);
+    setEventsLoading(false);
+  }, [groupId, poolId, loadPool]);
+
+  useEffect(() => {
+    return () => {
+      if (refreshTimerRef.current !== null) {
+        clearTimeout(refreshTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (groupId === null || poolId === null) {
+      return;
+    }
+
+    return subscribeToContractEvents(
+      { eventTypes: POOL_ACTIVITY_REALTIME_EVENT_TYPES, groupId, poolId },
+      (event) => {
+        if (event.type !== "deposit" && event.type !== "withdraw") {
+          return;
         }
 
-        return [event, ...current];
-      });
+        invalidatePoolCachesForEvent(event);
 
-      void loadPool();
-    });
-  }, [groupId, poolId, loadPool]);
+        if (wallet.address && event.type === "deposit" && event.actor === wallet.address) {
+          invalidateRewardSnapshotCaches(groupId, wallet.address);
+        }
+
+        setEvents((current) => appendUniquePoolEvent(current, toPoolEvent(event)));
+        scheduleRealtimeRefresh();
+      },
+    );
+  }, [groupId, poolId, scheduleRealtimeRefresh, wallet.address]);
 
   async function handleWithdraw(e: React.FormEvent) {
     e.preventDefault();
-    if (!wallet.address || !pool) return;
+    if (!wallet.address || !pool || groupId === null || poolId === null) return;
 
     setIsWithdrawing(true);
     setFeedback({
@@ -144,7 +225,7 @@ export default function PoolPage() {
 
       setWithdrawAmount("");
       setWithdrawRecipient("");
-      void loadPool();
+      void loadPool({ showEventsLoading: false, showLoading: false });
     } catch (error) {
       const isRejected = error instanceof TxError && error.kind === "rejected";
       setFeedback({
@@ -158,7 +239,7 @@ export default function PoolPage() {
   }
 
   async function handleClaimRewards() {
-    if (!wallet.address) return;
+    if (!wallet.address || groupId === null) return;
 
     setIsClaimingRewards(true);
     setFeedback({
@@ -183,7 +264,7 @@ export default function PoolPage() {
         hash: result.hash,
       });
 
-      void loadPool();
+      void loadPool({ showEventsLoading: false, showLoading: false });
     } catch (error) {
       const isRejected = error instanceof TxError && error.kind === "rejected";
       setFeedback({
@@ -202,6 +283,18 @@ export default function PoolPage() {
         <span className="spinner" aria-hidden="true" />
         Loading pool...
       </div>
+    );
+  }
+
+  if (groupId === null || poolId === null) {
+    return (
+      <>
+        <Link href="/" className="back-link">&larr; Back to dashboard</Link>
+        <div className="empty-state">
+          <h3>Invalid pool URL</h3>
+          <p>Use valid positive group and pool IDs in the URL.</p>
+        </div>
+      </>
     );
   }
 
@@ -479,7 +572,7 @@ export default function PoolPage() {
       <DepositModal
         open={showDeposit}
         onClose={() => setShowDeposit(false)}
-        onDeposited={() => void loadPool()}
+        onDeposited={() => void loadPool({ showEventsLoading: false, showLoading: false })}
         groupId={groupId}
         poolId={poolId}
         onSuccessFeedback={setFeedback}

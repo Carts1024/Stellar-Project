@@ -47,8 +47,9 @@ export type RpcEventsResponse = {
   latestLedger: number;
 };
 
-export type PoolEventFilters = Readonly<{
+export type ContractEventFilters = Readonly<{
   groupId?: number;
   poolId?: number;
+  eventTypes?: readonly string[];
   limit?: number;
 }>;

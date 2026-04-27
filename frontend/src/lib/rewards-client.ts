@@ -391,6 +391,10 @@ function invalidateRewardCaches(groupId: number, walletAddress: string) {
   invalidateCached("reward:total-supply");
 }
 
+export function invalidateRewardSnapshotCaches(groupId: number, walletAddress: string) {
+  invalidateRewardCaches(groupId, walletAddress);
+}
+
 export async function getRewardSnapshot(
   walletAddress: string | null,
   groupId: number | null,
