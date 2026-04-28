@@ -615,6 +615,10 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 | `INDEXER_BATCH_LIMIT` | No | Maximum events to fetch per `getEvents` request. Defaults to `200`. |
 | `INDEXER_START_LEDGER` | No | Optional ledger sequence to use for initial backfill. |
 
+### Railway (Indexer)
+
+The Railway config for the indexer lives at `indexer/railway.toml` (the repo root does not include a Railway config). Set the Railway service root to `indexer/` so Nixpacks uses that file, and configure the runtime secrets (`INDEXER_DATABASE_URL`, `INDEXER_CORE_CONTRACT_ID`, `INDEXER_REWARD_CONTRACT_ID`, etc.) in Railway variables.
+
 ---
 
 ## Running Quality Checks
