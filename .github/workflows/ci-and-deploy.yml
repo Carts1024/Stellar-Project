@@ -93,6 +93,12 @@ jobs:
         working-directory: indexer
         run: pnpm install --frozen-lockfile
 
+      - name: Generate Prisma client
+        working-directory: indexer
+        env:
+          INDEXER_DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/talambag?sslmode=disable
+        run: pnpm run db:generate
+
       - name: Typecheck indexer
         working-directory: indexer
         run: pnpm run typecheck
