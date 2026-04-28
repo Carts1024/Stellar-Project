@@ -1,8 +1,6 @@
 [build]
-builder = "NIXPACKS"
-NIXPACKS_NODE_VERSION=20
-NIXPACKS_PNPM_VERSION="10.33.2"
-buildCommand = "INDEXER_DATABASE_URL='postgresql://placeholder:placeholder@localhost:5432/talambag?sslmode=disable' pnpm run db:generate && pnpm run build"
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
 
 [deploy]
 startCommand = "pnpm run db:migrate:deploy && pnpm run start"
