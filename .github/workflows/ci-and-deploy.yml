@@ -114,7 +114,7 @@ jobs:
       - contracts
       - frontend
       - indexer
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && secrets.STELLAR_TESTNET_SECRET_KEY != '' && secrets.STELLAR_TESTNET_ADMIN_ADDRESS != ''
     env:
       STELLAR_TESTNET_ADMIN_ADDRESS: ${{ secrets.STELLAR_TESTNET_ADMIN_ADDRESS }}
       STELLAR_TESTNET_SECRET_KEY: ${{ secrets.STELLAR_TESTNET_SECRET_KEY }}
