@@ -198,11 +198,14 @@ function registerShutdownHandlers() {
 
 async function main() {
   await eventStore.connect();
-  await indexer.start();
   registerShutdownHandlers();
 
   server = app.listen(indexerConfig.PORT, () => {
     console.log(`Talambag indexer listening on port ${indexerConfig.PORT}`);
+  });
+
+  void indexer.start().catch((error) => {
+    console.error("Failed to start the Talambag indexer.", error);
   });
 }
 
