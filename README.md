@@ -1,5 +1,7 @@
 # Talambag
 
+[![CI And Testnet Deploy](https://github.com/Carts1024/Stellar-Project/actions/workflows/ci-and-deploy.yml/badge.svg?branch=main)](https://github.com/Carts1024/Stellar-Project/actions/workflows/ci-and-deploy.yml)
+
 **Talambag** is a portmanteau of *Tala* (Star/Stellar) and *Ambag* (Contribution) — literally meaning **"Stellar Contribution"**. It is a Soroban-powered community pooling application built on the Stellar blockchain. It helps real-world groups — families, organizations, and OFW communities — manage shared contributions with on-chain transparency that screenshot-based payment coordination simply cannot provide.
 
 Instead of collecting money through opaque chat threads and manually tracking who paid, Talambag records group membership, pool creation, contributions, and organizer withdrawals entirely on-chain.
@@ -58,6 +60,18 @@ Talambag — Wallet Disconnected
 
 ![Talambag Dashboard](frontend/public/screenshots/dashboard-overview.png)
 
+### Mobile Responsive
+
+![Talambag Mobile Dashboard](frontend/public/screenshots/mobile-dashboard.png)
+
+![Talambag Mobile Create Group](frontend/public/screenshots/mobile-create-new-group.png)
+
+![Talambag Mobile Groups](frontend/public/screenshots/mobile-groups.png)
+
+![Talambag Mobile Pools](frontend/public/screenshots/mobile-pools.png)
+
+![Talambag Mobile Deposit](frontend/public/screenshots/mobile-deposit.png)
+
 ### Group Page
 
 ![Group Page](frontend/public/screenshots/group-page.png)
@@ -92,16 +106,28 @@ Talambag — Wallet Disconnected
 
 ---
 
+## CI/CD Pipeline
+
+![CI/CD Pipeline Success](frontend/public/screenshots/ci-cd-success.png)
+
+---
+
 ## Smart Contract
 
 | Detail | Value |
 |---|---|
-| **Core Contract Address** | `CD44KFLGE2ISRUD6Q5BZTX3NI4ILTD5QUIWIED255UJDRAFJSR7GYIJE` |
+| **Core Contract Address** | `CC33ZSM7OC3ZGIGWQ7ZRSTEI5XNQJXR42Q67SZ5UAIXPPG5O3TAE4NRY` |
 | **Rewards Contract Address** | `CDLGOZDVXN7EGXDLLQ7CGGQQCLRUPA3CVIDICRJIK54FS4KBRYAREBU5` |
+| **Contribution Asset (SAC) Address** | `CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC` |
+| **Rewards Token Address** | `CALO6BXM5AIJGQIGAAC236AUJSNYRYEBAMP5GXRWQTGZXPEZ52UK3RPW` |
 | **Network** | Stellar Testnet |
-| **Core Contract Explorer** | [View Contract](https://stellar.expert/explorer/testnet/contract/CD44KFLGE2ISRUD6Q5BZTX3NI4ILTD5QUIWIED255UJDRAFJSR7GYIJE) |
+| **Core Contract Explorer** | [View Contract](https://stellar.expert/explorer/testnet/contract/CCMTJRJSJXN2ZEWE7FPNXFIYCJYWS4C7BRCFHQGDSJDHVMEJSN755L2D) |
 | **Rewards Contract Explorer** | [View Contract](https://stellar.expert/explorer/testnet/contract/CDLGOZDVXN7EGXDLLQ7CGGQQCLRUPA3CVIDICRJIK54FS4KBRYAREBU5) |
-| **Sample Transaction Hash** | [`63a9457f...`](https://stellar.expert/explorer/testnet/tx/63a9457f00da89738e4394b2ddcbf3f1a39951ade3cd7ffafa7466d1e28c3c31) |
+| **Contribution Asset Explorer** | [View Contract](https://stellar.expert/explorer/testnet/contract/CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC) |
+| **Sample Inter-Contract Transaction Hash (Linking Core Contract to Rewards Contract)** | [`63a9457f...`](https://stellar.expert/explorer/testnet/tx/b639784abf16b3e04214e2468d63f519b93f2284ce24bc6c32d6cfc78d545cab) |
+| **Sample Inter-Contract Transaction Hash (Linking Rewards Contract to Core Contract)** | [`63a9457f...`](https://stellar.expert/explorer/testnet/tx/14344aaf8c692ad54a6cae16d860fb4bea7dd8984750ca3f50a55f65d3267341) |
+
+Pools are stored inside the core contract; there is no separate pool contract address.
 
 ![Stellar Expert Contract](frontend/public/screenshots/talambag-contract.png)
 
