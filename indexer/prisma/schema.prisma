@@ -1,0 +1,42 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ContractSource {
+  core
+  rewards
+}
+
+model IndexerState {
+  stateKey   String   @id @map("state_key") @db.Text
+  stateValue String   @map("state_value") @db.Text
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("indexer_state")
+}
+
+model ContractEvent {
+  eventId    String         @id @map("event_id") @db.Text
+  cursor     String         @db.Text
+  contractId String         @map("contract_id") @db.Text
+  source     ContractSource
+  eventType  String         @map("event_type") @db.Text
+  groupId    Int?           @map("group_id")
+  poolId     Int?           @map("pool_id")
+  actor      String?        @db.Text
+  recipient  String?        @db.Text
+  amount     String?        @db.Text
+  txHash     String         @map("tx_hash") @db.Text
+  ledger     Int
+  occurredAt DateTime       @map("occurred_at") @db.Timestamptz(6)
+  payload    Json           @db.JsonB
+  createdAt  DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([groupId, poolId, occurredAt(sort: Desc)], map: "contract_events_group_pool_idx")
+  @@index([ledger(sort: Desc), eventId(sort: Desc)], map: "contract_events_ledger_idx")
+  @@map("contract_events")
+}

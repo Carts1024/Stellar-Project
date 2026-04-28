@@ -12,6 +12,10 @@
   --rose: #c75b4f;
   --shadow: 0 24px 60px rgba(24, 30, 26, 0.12);
   --shadow-sm: 0 4px 16px rgba(24, 30, 26, 0.08);
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
 }
 
 * {
@@ -26,6 +30,7 @@ body {
   margin: 0;
   min-height: 100vh;
   color: var(--ink);
+  overflow-x: hidden;
   background:
     radial-gradient(circle at top left, rgba(15, 118, 110, 0.15), transparent 28%),
     radial-gradient(circle at top right, rgba(209, 154, 42, 0.18), transparent 24%),
@@ -38,8 +43,31 @@ input {
   font: inherit;
 }
 
+button {
+  touch-action: manipulation;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible {
+  outline: 2px solid rgba(15, 118, 110, 0.35);
+  outline-offset: 3px;
+}
+
 a {
   color: inherit;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .page-shell {
@@ -47,7 +75,9 @@ a {
   overflow: hidden;
   max-width: 1240px;
   margin: 0 auto;
-  padding: 40px 20px 72px;
+  padding:
+    40px calc(20px + var(--safe-right))
+    calc(72px + var(--safe-bottom)) calc(20px + var(--safe-left));
 }
 
 .ambient {
@@ -142,6 +172,7 @@ a {
   border: 0;
   border-radius: 999px;
   padding: 14px 20px;
+  min-height: 44px;
   cursor: pointer;
   transition:
     transform 160ms ease,
@@ -259,6 +290,17 @@ a {
   margin-bottom: 22px;
 }
 
+.global-notice-stack {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 22px;
+}
+
+.global-connectivity-notice,
+.global-wallet-notice {
+  margin-bottom: 0;
+}
+
 .card-head h2,
 .feedback-card h2,
 .notice-card h2 {
@@ -283,6 +325,8 @@ a {
 .stack-form input {
   width: 100%;
   padding: 14px 16px;
+  min-height: 44px;
+  font-size: 16px;
   border-radius: 18px;
   border: 1px solid rgba(23, 37, 31, 0.12);
   background: rgba(255, 255, 255, 0.76);
@@ -332,9 +376,12 @@ a {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  width: min(100%, 1240px);
   max-width: 1240px;
   margin: 0 auto;
-  padding: 16px 20px;
+  padding:
+    calc(16px + var(--safe-top)) calc(20px + var(--safe-right))
+    8px calc(20px + var(--safe-left));
 }
 
 .navbar-brand {
@@ -361,14 +408,17 @@ a {
 
 .wb-root {
   position: relative;
+  min-width: 0;
 }
 
 /* Connect button */
 .wb-connect-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   padding: 10px 20px;
+  min-height: 44px;
   border: none;
   border-radius: 999px;
   cursor: pointer;
@@ -434,6 +484,8 @@ a {
 .wb-account-btn {
   display: inline-flex;
   align-items: center;
+  min-height: 44px;
+  min-width: 0;
   gap: 8px;
   padding: 5px 12px 5px 5px;
   border-radius: 999px;
@@ -509,6 +561,10 @@ a {
   font-size: 0.875rem;
   font-weight: 600;
   color: var(--ink);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Animated chevron */
@@ -528,6 +584,8 @@ a {
   top: calc(100% + 8px);
   right: 0;
   min-width: 268px;
+  width: min(320px, calc(100vw - 24px - var(--safe-left) - var(--safe-right)));
+  max-width: calc(100vw - 24px - var(--safe-left) - var(--safe-right));
   padding: 14px;
   border-radius: 20px;
   background: rgba(253, 250, 245, 0.97);
@@ -644,6 +702,7 @@ a {
     background 120ms ease,
     color 120ms ease;
   max-width: 168px;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -689,7 +748,7 @@ a {
 
 .search-wrapper {
   position: relative;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
 }
 
 .search-icon {
@@ -704,6 +763,8 @@ a {
 .search-input {
   width: 100%;
   padding: 14px 16px 14px 44px;
+  min-height: 44px;
+  font-size: 16px;
   border-radius: 18px;
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.76);
@@ -725,6 +786,10 @@ a {
   display: flex;
   justify-content: center;
   align-items: center;
+  overflow-y: auto;
+  padding:
+    calc(16px + var(--safe-top)) calc(12px + var(--safe-right))
+    calc(16px + var(--safe-bottom)) calc(12px + var(--safe-left));
   background: rgba(23, 37, 31, 0.45);
   backdrop-filter: blur(6px);
 }
@@ -735,6 +800,8 @@ a {
   max-width: 480px;
   max-height: 90vh;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   padding: 28px;
   border-radius: 28px;
   background: var(--surface-strong);
@@ -746,12 +813,17 @@ a {
   position: absolute;
   top: 14px;
   right: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: none;
   border: 0;
   font-size: 1.4rem;
   color: var(--muted);
   cursor: pointer;
   line-height: 1;
+  min-width: 44px;
+  min-height: 44px;
   padding: 4px 8px;
   border-radius: 8px;
 }
@@ -829,6 +901,10 @@ a {
   flex-wrap: wrap;
 }
 
+.page-header-actions > * {
+  min-width: 140px;
+}
+
 .page-subtitle {
   margin: 4px 0 0;
   color: var(--muted);
@@ -861,6 +937,27 @@ a {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 18px;
   margin-top: 18px;
+}
+
+.section-block {
+  margin-top: 28px;
+}
+
+.section-title {
+  margin: 0 0 12px;
+  font-size: 1.35rem;
+}
+
+.section-title--large {
+  font-size: 1.5rem;
+}
+
+.status-grid--dashboard {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.status-grid--group {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 /* ── Pool Info Header ──────────────────────────────────── */
@@ -935,6 +1032,10 @@ a {
 .tx-row--clickable:focus-visible {
   outline: 2px solid rgba(15, 118, 110, 0.5);
   outline-offset: -2px;
+}
+
+.tx-table td::before {
+  display: none;
 }
 
 /* ── Withdraw Section ──────────────────────────────────── */
@@ -1019,7 +1120,9 @@ a {
 
 @media (max-width: 720px) {
   .page-shell {
-    padding: 24px 14px 56px;
+    padding:
+      24px calc(14px + var(--safe-right))
+      calc(56px + var(--safe-bottom)) calc(14px + var(--safe-left));
   }
 
   .hero,
@@ -1056,11 +1159,179 @@ a {
   .navbar {
     flex-direction: column;
     gap: 12px;
+    align-items: stretch;
+  }
+
+  .navbar-actions,
+  .navbar-actions > * {
+    width: 100%;
+  }
+
+  .wb-root,
+  .wb-connect-btn,
+  .wb-account-btn {
+    width: 100%;
+  }
+
+  .wb-connect-btn,
+  .wb-account-btn {
+    justify-content: center;
+  }
+
+  .wb-dropdown {
+    left: 0;
+    right: 0;
+    top: calc(100% + 10px);
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+  }
+
+  .wb-dropdown-row {
+    flex-direction: column;
     align-items: flex-start;
+    gap: 6px;
+  }
+
+  .wb-copy-btn {
+    width: 100%;
+    max-width: none;
+    justify-content: space-between;
+  }
+
+  .page-header-actions {
+    width: 100%;
+  }
+
+  .page-header-actions > * {
+    flex: 1 1 100%;
   }
 
   .pool-info-header {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .tx-table thead {
+    display: none;
+  }
+
+  .tx-table,
+  .tx-table tbody,
+  .tx-table tr,
+  .tx-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .tx-table tr {
+    padding: 14px 16px;
+    margin-bottom: 12px;
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.62);
+  }
+
+  .tx-table td {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(23, 37, 31, 0.08);
+    text-align: right;
+  }
+
+  .tx-table td:last-child {
+    border-bottom: 0;
+    padding-bottom: 0;
+  }
+
+  .tx-table td::before {
+    content: attr(data-label);
+    display: inline-block;
+    font-size: 0.74rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    text-align: left;
+  }
+}
+
+@media (max-width: 560px) {
+  .hero {
+    padding: 22px 18px;
+    border-radius: 26px;
+  }
+
+  .modal-backdrop {
+    align-items: flex-end;
+    padding-top: calc(12px + var(--safe-top));
+  }
+
+  .modal-panel {
+    width: 100%;
+    max-width: none;
+    max-height: 92vh;
+    padding: 22px 16px calc(28px + var(--safe-bottom));
+    border-radius: 24px 24px 0 0;
+  }
+
+  .withdraw-section,
+  .metric-card,
+  .action-card,
+  .group-card,
+  .pool-card,
+  .feedback-card,
+  .notice-card {
+    padding: 18px;
+  }
+}
+
+@media (max-width: 420px) {
+  .page-shell {
+    padding:
+      18px calc(12px + var(--safe-right))
+      calc(48px + var(--safe-bottom)) calc(12px + var(--safe-left));
+  }
+
+  .navbar {
+    padding:
+      calc(12px + var(--safe-top)) calc(12px + var(--safe-right))
+      0 calc(12px + var(--safe-left));
+  }
+
+  .navbar-brand {
+    font-size: 1.2rem;
+  }
+
+  .hero h1 {
+    font-size: clamp(2rem, 12vw, 2.8rem);
+  }
+
+  .metric-value.address {
+    font-size: 0.98rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .primary-button:hover,
+  .ghost-button:hover,
+  .group-card:hover,
+  .pool-card:hover,
+  .wb-connect-btn:hover:not(:disabled),
+  .wb-account-btn:hover:not(:disabled) {
+    transform: none;
   }
 }
 

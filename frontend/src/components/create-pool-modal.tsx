@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Modal } from "@/components/modal";
 import { FeedbackBanner } from "@/components/feedback-banner";
 import { useWallet } from "@/contexts/wallet-context";
@@ -18,6 +18,7 @@ type Props = {
 
 export function CreatePoolModal({ open, onClose, onCreated, groupId, onSuccessFeedback }: Props) {
   const { wallet } = useWallet();
+  const titleId = useId();
   const [poolName, setPoolName] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<TxFeedback>({ state: "idle", title: "" });
@@ -26,6 +27,7 @@ export function CreatePoolModal({ open, onClose, onCreated, groupId, onSuccessFe
     !isSubmitting &&
     wallet.status === "connected" &&
     wallet.address &&
+    !wallet.isCached &&
     wallet.isExpectedNetwork &&
     poolName.trim();
 
@@ -86,10 +88,10 @@ export function CreatePoolModal({ open, onClose, onCreated, groupId, onSuccessFe
   }
 
   return (
-    <Modal open={open} onClose={handleClose}>
+    <Modal open={open} onClose={handleClose} titleId={titleId}>
       <div className="card-head">
         <span className="card-kicker">Pool creation</span>
-        <h2>Create a pool in group #{groupId}</h2>
+        <h2 id={titleId}>Create a pool in group #{groupId}</h2>
       </div>
       <p className="card-copy">
         Any member of this group can create a pool. The creating wallet becomes the organizer.

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Modal } from "@/components/modal";
 import { FeedbackBanner } from "@/components/feedback-banner";
 import { useWallet } from "@/contexts/wallet-context";
@@ -18,6 +18,7 @@ type Props = {
 
 export function AddMemberModal({ open, onClose, onAdded, groupId, onSuccessFeedback }: Props) {
   const { wallet } = useWallet();
+  const titleId = useId();
   const [memberAddress, setMemberAddress] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<TxFeedback>({ state: "idle", title: "" });
@@ -27,6 +28,7 @@ export function AddMemberModal({ open, onClose, onAdded, groupId, onSuccessFeedb
     !isSubmitting &&
     wallet.status === "connected" &&
     wallet.address &&
+    !wallet.isCached &&
     wallet.isExpectedNetwork &&
     isValid;
 
@@ -82,10 +84,10 @@ export function AddMemberModal({ open, onClose, onAdded, groupId, onSuccessFeedb
   }
 
   return (
-    <Modal open={open} onClose={handleClose}>
+    <Modal open={open} onClose={handleClose} titleId={titleId}>
       <div className="card-head">
         <span className="card-kicker">Membership</span>
-        <h2>Add a member to group #{groupId}</h2>
+        <h2 id={titleId}>Add a member to group #{groupId}</h2>
       </div>
       <p className="card-copy">
         Only the group owner can approve new members. Members can create pools and contribute.

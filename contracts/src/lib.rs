@@ -1,13 +1,19 @@
 #![no_std]
 
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, symbol_short, token, Address, Env, String,
+    contract, contracterror, contractimpl, contracttype, symbol_short, token, vec, Address, Env,
+    IntoVal, String, Symbol,
 };
+
+const INSTANCE_TTL_THRESHOLD: u32 = 100;
+const INSTANCE_TTL_EXTEND_TO: u32 = 518_400;
 
 #[derive(Clone)]
 #[contracttype]
 pub enum DataKey {
+    Admin,
     NextGroupId,
+    RewardsContract,
     Group(u32),
     GroupMember(u32, Address),
     Pool(u32, u32),
@@ -46,6 +52,7 @@ pub enum Error {
     NotGroupMember = 6,
     InsufficientPoolBalance = 7,
     NameRequired = 8,
+    ArithmeticOverflow = 9,
 }
 
 #[contract]
@@ -53,12 +60,47 @@ pub struct TalambagContract;
 
 #[contractimpl]
 impl TalambagContract {
+    pub fn __constructor(env: Env, admin: Address) {
+        env.storage().instance().set(&DataKey::Admin, &admin);
+        Self::touch_instance(&env);
+    }
+
+    pub fn admin(env: Env) -> Address {
+        Self::touch_instance(&env);
+        env.storage().instance().get(&DataKey::Admin).unwrap()
+    }
+
+    pub fn set_rewards_contract(
+        env: Env,
+        admin: Address,
+        rewards_contract: Address,
+    ) -> Result<(), Error> {
+        Self::touch_instance(&env);
+        Self::require_admin(&env, &admin)?;
+        env.storage()
+            .instance()
+            .set(&DataKey::RewardsContract, &rewards_contract);
+
+        env.events().publish(
+            (Symbol::new(&env, "rewards_linked"),),
+            rewards_contract,
+        );
+
+        Ok(())
+    }
+
+    pub fn rewards_contract(env: Env) -> Option<Address> {
+        Self::touch_instance(&env);
+        env.storage().instance().get(&DataKey::RewardsContract)
+    }
+
     pub fn create_group(
         env: Env,
         owner: Address,
         name: String,
         asset: Address,
     ) -> Result<u32, Error> {
+        Self::touch_instance(&env);
         Self::require_non_empty_name(&name)?;
         owner.require_auth();
 
@@ -78,7 +120,14 @@ impl TalambagContract {
             .set(&DataKey::GroupMember(group_id, owner), &true);
         env.storage()
             .instance()
-            .set(&DataKey::NextGroupId, &(group_id + 1));
+            .set(&DataKey::NextGroupId, &Self::checked_increment_u32(group_id)?);
+
+        env.events().publish(
+            (Symbol::new(&env, "group_created"), group_id),
+            (group.owner.clone(), group.asset.clone()),
+        );
+
+        Self::register_group_with_rewards(&env, group_id, group.owner.clone());
 
         Ok(group_id)
     }
@@ -89,6 +138,7 @@ impl TalambagContract {
         group_id: u32,
         member: Address,
     ) -> Result<(), Error> {
+        Self::touch_instance(&env);
         owner.require_auth();
 
         let mut group = Self::group(env.clone(), group_id)?;
@@ -96,14 +146,19 @@ impl TalambagContract {
             return Err(Error::Unauthorized);
         }
 
-        let member_key = DataKey::GroupMember(group_id, member);
+        let member_key = DataKey::GroupMember(group_id, member.clone());
         if env.storage().instance().has(&member_key) {
             return Err(Error::AlreadyGroupMember);
         }
 
         env.storage().instance().set(&member_key, &true);
-        group.member_count += 1;
+        group.member_count = Self::checked_increment_u32(group.member_count)?;
         env.storage().instance().set(&DataKey::Group(group_id), &group);
+
+        env.events().publish(
+            (Symbol::new(&env, "member_added"), group_id),
+            member,
+        );
 
         Ok(())
     }
@@ -114,6 +169,7 @@ impl TalambagContract {
         group_id: u32,
         name: String,
     ) -> Result<u32, Error> {
+        Self::touch_instance(&env);
         Self::require_non_empty_name(&name)?;
         creator.require_auth();
 
@@ -127,7 +183,7 @@ impl TalambagContract {
             id: pool_id,
             group_id,
             name,
-            organizer: creator,
+            organizer: creator.clone(),
             balance: 0,
         };
 
@@ -135,8 +191,13 @@ impl TalambagContract {
             .instance()
             .set(&DataKey::Pool(group_id, pool_id), &pool);
 
-        group.next_pool_id += 1;
+        group.next_pool_id = Self::checked_increment_u32(group.next_pool_id)?;
         env.storage().instance().set(&DataKey::Group(group_id), &group);
+
+        env.events().publish(
+            (Symbol::new(&env, "pool_created"), group_id, pool_id),
+            creator.clone(),
+        );
 
         Ok(pool_id)
     }
@@ -148,6 +209,7 @@ impl TalambagContract {
         pool_id: u32,
         amount: i128,
     ) -> Result<(), Error> {
+        Self::touch_instance(&env);
         if amount <= 0 {
             return Err(Error::AmountMustBePositive);
         }
@@ -164,13 +226,15 @@ impl TalambagContract {
         let contract_address = env.current_contract_address();
 
         token.transfer(&from, &contract_address, &amount);
-        pool.balance += amount;
+        pool.balance = Self::checked_add_i128(pool.balance, amount)?;
         env.storage()
             .instance()
             .set(&DataKey::Pool(group_id, pool_id), &pool);
 
         env.events()
-            .publish((symbol_short!("deposit"), group_id, pool_id), (from, amount));
+            .publish((symbol_short!("deposit"), group_id, pool_id), (from.clone(), amount));
+
+        Self::record_contribution_with_rewards(&env, group_id, from.clone(), amount);
 
         Ok(())
     }
@@ -183,6 +247,7 @@ impl TalambagContract {
         to: Address,
         amount: i128,
     ) -> Result<(), Error> {
+        Self::touch_instance(&env);
         if amount <= 0 {
             return Err(Error::AmountMustBePositive);
         }
@@ -203,7 +268,7 @@ impl TalambagContract {
         let contract_address = env.current_contract_address();
         token.transfer(&contract_address, &to, &amount);
 
-        pool.balance -= amount;
+        pool.balance = Self::checked_sub_i128(pool.balance, amount)?;
         env.storage()
             .instance()
             .set(&DataKey::Pool(group_id, pool_id), &pool);
@@ -217,6 +282,7 @@ impl TalambagContract {
     }
 
     pub fn group_count(env: Env) -> u32 {
+        Self::touch_instance(&env);
         env.storage()
             .instance()
             .get(&DataKey::NextGroupId)
@@ -224,6 +290,7 @@ impl TalambagContract {
     }
 
     pub fn group(env: Env, group_id: u32) -> Result<Group, Error> {
+        Self::touch_instance(&env);
         env.storage()
             .instance()
             .get(&DataKey::Group(group_id))
@@ -231,6 +298,7 @@ impl TalambagContract {
     }
 
     pub fn pool(env: Env, group_id: u32, pool_id: u32) -> Result<Pool, Error> {
+        Self::touch_instance(&env);
         let _group = Self::group(env.clone(), group_id)?;
 
         env.storage()
@@ -240,6 +308,7 @@ impl TalambagContract {
     }
 
     pub fn is_member(env: Env, group_id: u32, member: Address) -> Result<bool, Error> {
+        Self::touch_instance(&env);
         let _group = Self::group(env.clone(), group_id)?;
 
         Ok(env
@@ -249,6 +318,7 @@ impl TalambagContract {
     }
 
     pub fn pool_balance(env: Env, group_id: u32, pool_id: u32) -> Result<i128, Error> {
+        Self::touch_instance(&env);
         Ok(Self::pool(env, group_id, pool_id)?.balance)
     }
 
@@ -264,6 +334,61 @@ impl TalambagContract {
             Err(Error::NameRequired)
         } else {
             Ok(())
+        }
+    }
+
+    fn touch_instance(env: &Env) {
+        env.storage()
+            .instance()
+            .extend_ttl(INSTANCE_TTL_THRESHOLD, INSTANCE_TTL_EXTEND_TO);
+    }
+
+    fn require_admin(env: &Env, admin: &Address) -> Result<(), Error> {
+        admin.require_auth();
+        if Self::admin(env.clone()) != *admin {
+            return Err(Error::Unauthorized);
+        }
+        Ok(())
+    }
+
+    fn checked_increment_u32(value: u32) -> Result<u32, Error> {
+        value.checked_add(1).ok_or(Error::ArithmeticOverflow)
+    }
+
+    fn checked_add_i128(left: i128, right: i128) -> Result<i128, Error> {
+        left.checked_add(right).ok_or(Error::ArithmeticOverflow)
+    }
+
+    fn checked_sub_i128(left: i128, right: i128) -> Result<i128, Error> {
+        left.checked_sub(right).ok_or(Error::ArithmeticOverflow)
+    }
+
+    fn register_group_with_rewards(env: &Env, group_id: u32, owner: Address) {
+        if let Some(rewards_contract) = env.storage().instance().get::<_, Address>(&DataKey::RewardsContract) {
+            env.invoke_contract::<()>(
+                &rewards_contract,
+                &Symbol::new(env, "register_group"),
+                vec![env, group_id.into_val(env), owner.into_val(env)],
+            );
+        }
+    }
+
+    fn record_contribution_with_rewards(env: &Env, group_id: u32, contributor: Address, amount: i128) {
+        if let Some(rewards_contract) = env.storage().instance().get::<_, Address>(&DataKey::RewardsContract) {
+            if let Some(group) = env.storage().instance().get::<_, Group>(&DataKey::Group(group_id)) {
+                Self::register_group_with_rewards(env, group_id, group.owner);
+            }
+
+            env.invoke_contract::<i128>(
+                &rewards_contract,
+                &Symbol::new(env, "record_contribution"),
+                vec![
+                    env,
+                    group_id.into_val(env),
+                    contributor.into_val(env),
+                    amount.into_val(env),
+                ],
+            );
         }
     }
 }

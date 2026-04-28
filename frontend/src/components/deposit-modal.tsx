@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Modal } from "@/components/modal";
 import { FeedbackBanner } from "@/components/feedback-banner";
 import { useWallet } from "@/contexts/wallet-context";
 import { appConfig } from "@/lib/config";
 import { parseAmountToInt } from "@/lib/format";
+import { invalidateRewardSnapshotCaches } from "@/lib/rewards-client";
 import { TxError, depositToPool } from "@/lib/talambag-client";
 import type { TxFeedback } from "@/lib/types";
 
@@ -27,6 +28,7 @@ export function DepositModal({
   onSuccessFeedback,
 }: Props) {
   const { wallet } = useWallet();
+  const titleId = useId();
   const [amount, setAmount] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<TxFeedback>({ state: "idle", title: "" });
@@ -35,6 +37,7 @@ export function DepositModal({
     !isSubmitting &&
     wallet.status === "connected" &&
     wallet.address &&
+    !wallet.isCached &&
     wallet.isExpectedNetwork &&
     amount.trim();
 
@@ -74,6 +77,7 @@ export function DepositModal({
       setFeedback(successFeedback);
       onSuccessFeedback(successFeedback);
 
+      invalidateRewardSnapshotCaches(groupId, wallet.address);
       setAmount("");
       onDeposited();
       handleClose();
@@ -95,10 +99,10 @@ export function DepositModal({
   }
 
   return (
-    <Modal open={open} onClose={handleClose}>
+    <Modal open={open} onClose={handleClose} titleId={titleId}>
       <div className="card-head">
         <span className="card-kicker">Contribution</span>
-        <h2>Deposit into pool #{poolId}</h2>
+        <h2 id={titleId}>Deposit into pool #{poolId}</h2>
       </div>
       <p className="card-copy">
         Deposits are allowed only for wallets that belong to the group.

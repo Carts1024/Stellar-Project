@@ -13,6 +13,7 @@ export const appConfig = {
   network: process.env.NEXT_PUBLIC_STELLAR_NETWORK ?? "TESTNET",
   networkPassphrase: configuredPassphrase,
   contractId: process.env.NEXT_PUBLIC_TALAMBAG_CONTRACT_ID ?? "",
+  rewardContractId: process.env.NEXT_PUBLIC_TALAMBAG_REWARDS_CONTRACT_ID ?? "",
   assetAddress: process.env.NEXT_PUBLIC_TALAMBAG_ASSET_ADDRESS ?? "",
   assetCode: process.env.NEXT_PUBLIC_TALAMBAG_ASSET_CODE ?? "XLM",
   assetDecimals: Number(process.env.NEXT_PUBLIC_TALAMBAG_ASSET_DECIMALS ?? "7"),
@@ -20,6 +21,7 @@ export const appConfig = {
     process.env.NEXT_PUBLIC_STELLAR_EXPLORER_URL ??
     "https://stellar.expert/explorer/testnet",
   readAddress: process.env.NEXT_PUBLIC_STELLAR_READ_ADDRESS ?? "",
+  indexerUrl: process.env.NEXT_PUBLIC_TALAMBAG_INDEXER_URL ?? "",
 };
 
 export const networkPassphraseByName: Record<string, string> = {
@@ -34,4 +36,8 @@ export function getExpectedNetworkPassphrase() {
 
 export function hasRequiredConfig() {
   return Boolean(appConfig.contractId && appConfig.rpcUrl);
+}
+
+export function hasRewardsConfig() {
+  return Boolean(appConfig.rewardContractId && appConfig.rpcUrl);
 }

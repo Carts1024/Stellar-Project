@@ -2,6 +2,11 @@
 
 import { useEffect, useState } from "react";
 import {
+  clearPersistedWalletSnapshot,
+  persistWalletSnapshot,
+  readPersistedWalletSnapshot,
+} from "@/lib/pwa/wallet-persistence";
+import {
   connectWalletWithKit,
   disconnectActiveWallet,
   ensureWalletKitInitialized,
@@ -19,6 +24,7 @@ const initialWalletState: WalletSnapshot = {
   networkPassphrase: null,
   isExpectedNetwork: false,
   isNetworkVerified: false,
+  isCached: false,
   xlmBalance: null,
 };
 
@@ -48,9 +54,11 @@ export function useWalletKit() {
     try {
       await ensureWalletKitInitialized();
       const snapshot = await readWalletSnapshot();
+      persistWalletSnapshot(snapshot);
       setWallet(snapshot);
       return snapshot;
     } catch (error) {
+      clearPersistedWalletSnapshot();
       const fallback: WalletSnapshot = {
         ...initialWalletState,
         status: "unsupported",
@@ -67,6 +75,7 @@ export function useWalletKit() {
 
     try {
       const snapshot = await connectWalletWithKit();
+      persistWalletSnapshot(snapshot);
       setWallet(snapshot);
       return snapshot;
     } catch (error) {
@@ -82,6 +91,7 @@ export function useWalletKit() {
       );
 
       if (!isCancellation) {
+        clearPersistedWalletSnapshot();
         throw new Error(message);
       }
 
@@ -93,6 +103,7 @@ export function useWalletKit() {
     try {
       await disconnectActiveWallet();
     } finally {
+      clearPersistedWalletSnapshot();
       setWallet(initialWalletState);
     }
   }
@@ -100,6 +111,11 @@ export function useWalletKit() {
   useEffect(() => {
     let isMounted = true;
     let unsubscribe = () => {};
+
+    const persistedSnapshot = readPersistedWalletSnapshot();
+    if (persistedSnapshot) {
+      setWallet(persistedSnapshot);
+    }
 
     async function setupWalletKit() {
       const stop = await subscribeWalletKitEvents({
@@ -115,6 +131,7 @@ export function useWalletKit() {
         },
         onDisconnect: () => {
           if (isMounted) {
+            clearPersistedWalletSnapshot();
             setWallet(initialWalletState);
           }
         },

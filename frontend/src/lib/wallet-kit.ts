@@ -86,6 +86,7 @@ function createWalletSnapshot(overrides: Partial<WalletSnapshot> = {}): WalletSn
     networkPassphrase: null,
     isExpectedNetwork: false,
     isNetworkVerified: false,
+    isCached: false,
     xlmBalance: null,
     ...overrides,
   };

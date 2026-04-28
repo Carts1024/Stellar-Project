@@ -13,6 +13,7 @@ Instead of collecting money through opaque chat threads and manually tracking wh
 - [UI Screenshots](#ui-screenshots)
 - [Smart Contract](#smart-contract)
 - [Architecture Overview](#architecture-overview)
+- [Implemented Features](#implemented-features)
 - [Project Structure](#project-structure)
 - [Smart Contract Reference](#smart-contract-reference)
 - [Frontend Reference](#frontend-reference)
@@ -95,9 +96,11 @@ Talambag — Wallet Disconnected
 
 | Detail | Value |
 |---|---|
-| **Contract Address** | `CD44KFLGE2ISRUD6Q5BZTX3NI4ILTD5QUIWIED255UJDRAFJSR7GYIJE` |
+| **Core Contract Address** | `CD44KFLGE2ISRUD6Q5BZTX3NI4ILTD5QUIWIED255UJDRAFJSR7GYIJE` |
+| **Rewards Contract Address** | `CDLGOZDVXN7EGXDLLQ7CGGQQCLRUPA3CVIDICRJIK54FS4KBRYAREBU5` |
 | **Network** | Stellar Testnet |
-| **Stellar Expert** | [View Contract](https://stellar.expert/explorer/testnet/contract/CD44KFLGE2ISRUD6Q5BZTX3NI4ILTD5QUIWIED255UJDRAFJSR7GYIJE) |
+| **Core Contract Explorer** | [View Contract](https://stellar.expert/explorer/testnet/contract/CD44KFLGE2ISRUD6Q5BZTX3NI4ILTD5QUIWIED255UJDRAFJSR7GYIJE) |
+| **Rewards Contract Explorer** | [View Contract](https://stellar.expert/explorer/testnet/contract/CDLGOZDVXN7EGXDLLQ7CGGQQCLRUPA3CVIDICRJIK54FS4KBRYAREBU5) |
 | **Sample Transaction Hash** | [`63a9457f...`](https://stellar.expert/explorer/testnet/tx/63a9457f00da89738e4394b2ddcbf3f1a39951ade3cd7ffafa7466d1e28c3c31) |
 
 ![Stellar Expert Contract](frontend/public/screenshots/talambag-contract.png)
@@ -106,18 +109,24 @@ Talambag — Wallet Disconnected
 
 ## Architecture Overview
 
-Talambag is split into two layers:
+Talambag is split into three layers:
 
 ```
 ┌─────────────────────────────┐
 │        Next.js Frontend     │  React 19 · TypeScript · pnpm
 │  (Vercel-deployed SPA/SSR)  │
 └────────────┬────────────────┘
-             │  @stellar/stellar-sdk  +  stellar-wallets-kit
+             │  @stellar/stellar-sdk + stellar-wallets-kit + EventSource
              ▼
 ┌─────────────────────────────┐
-│   Stellar Soroban Testnet   │  Soroban RPC  ·  Horizon
-│   TalambagContract (WASM)   │  Rust · soroban-sdk 22
+│      Talambag Indexer       │  Express · TypeScript · Neon Postgres
+│  Polls RPC, stores events,  │  serves history + realtime SSE
+└────────────┬────────────────┘
+             │  Stellar RPC getEvents
+             ▼
+┌─────────────────────────────┐
+│   Stellar Soroban Testnet   │  Soroban RPC · Horizon
+│ Talambag Core + Rewards WASM│  Rust · soroban-sdk 22
 └─────────────────────────────┘
 ```
 
@@ -126,9 +135,10 @@ Talambag is split into two layers:
 1. A **group owner** creates a group on-chain, choosing a name and the Stellar asset used for contributions. The owner is automatically the first member.
 2. The owner **adds wallet addresses** as members. Only members can interact with pools inside the group.
 3. Any member can **create a pool** with a name. The wallet that creates the pool becomes its **organizer**.
-4. Group members **deposit** tokens into a pool. The contract holds the balance in escrow.
-5. The pool **organizer** can **withdraw** any amount to any Stellar address they choose.
-6. Every deposit and withdrawal emits an **on-chain event** that the frontend reads via the Stellar Expert API.
+4. Group members **deposit** tokens into a pool. The core contract keeps pooled funds in escrow and forwards contribution data to the rewards contract.
+5. The rewards contract tracks **claimable reward tokens** for each contributor. Claiming rewards calls back into Talambag core to verify group membership before minting tokens.
+6. The pool **organizer** can **withdraw** any amount to any Stellar address they choose.
+7. Both contracts emit **on-chain events** that a separate indexer normalizes into Neon PostgreSQL and streams to the frontend in real time.
 
 ### Problem It Solves
 
@@ -138,15 +148,32 @@ Talambag gives the group a smart-contract-backed source of truth. Balances are h
 
 ---
 
+## Implemented Features
+
+- On-chain group, member, pool, deposit, and organizer-withdraw workflows powered by the Talambag core Soroban contract.
+- Separate rewards contract that tracks pending TLMBG rewards, claimed balances, per-group contribution totals, and global token supply.
+- Cross-contract rewards accrual: every successful deposit forwards contribution data from the core contract into the rewards contract.
+- Admin-controlled contract binding through `set_rewards_contract` on the core contract and `set_core_contract` on the rewards contract.
+- Automatic rewards registration for newly created groups, plus first-post-link synchronization for older groups that were created before rewards were linked.
+- Pool-page rewards dashboard showing pending claim, wallet balance, reward-weighted contribution total, and total TLMBG supply.
+- Claim flow that verifies active Talambag membership before minting TLMBG to the connected wallet.
+- Realtime indexer support for both core and rewards contracts so frontend reads and event streams stay in sync with on-chain activity.
+
+---
+
 ## Project Structure
 
 ```
 Stellar-Project/
-├── contracts/                  # Soroban smart contract (Rust)
+├── contracts/                  # Soroban smart contracts (Rust workspace)
 │   ├── Cargo.toml
 │   └── src/
-│       ├── lib.rs              # Contract logic
-│       └── test.rs             # Unit and integration tests
+│       ├── lib.rs              # Talambag core contract logic
+│       └── test.rs             # Cross-contract unit tests
+│   └── rewards/
+│       ├── Cargo.toml
+│       └── src/
+│           └── lib.rs          # Reward/governance token contract
 └── frontend/                   # Next.js 15 web application
     ├── package.json
     ├── next.config.ts
@@ -183,11 +210,23 @@ Stellar-Project/
         └── lib/
             ├── config.ts           # App-wide config from environment variables
             ├── talambag-client.ts  # All Soroban RPC calls and signing logic
+          ├── rewards-client.ts   # Reward token reads and claim actions
+          ├── realtime-events.ts  # Indexer-backed event history + SSE helpers
             ├── wallet-kit.ts       # Stellar Wallets Kit initialization and helpers
             ├── types.ts            # Shared TypeScript types
             ├── format.ts           # Amount formatting and address shortening
             ├── validators.ts       # Stellar address and text validation
             └── cache.ts            # 30-second TTL in-memory cache for RPC reads
+    └── indexer/                    # Realtime event ingestion service
+      ├── package.json
+      ├── tsconfig.json
+      ├── .env.example
+      └── src/
+        ├── server.ts           # HTTP API + SSE stream
+        ├── indexer.ts          # RPC polling loop
+        ├── normalize-event.ts  # Soroban event decoding
+        ├── db.ts               # Neon/Postgres persistence
+        └── config.ts           # Environment parsing
 ```
 
 ---
@@ -223,7 +262,9 @@ The contract (`contracts/src/lib.rs`) is written in Rust using [soroban-sdk 22](
 
 | Variant | Description |
 |---|---|
+| `Admin` | Admin address that can link the rewards contract |
 | `NextGroupId` | Global counter for the next group ID |
+| `RewardsContract` | Stores the linked rewards contract address |
 | `Group(u32)` | Stores a `Group` struct by group ID |
 | `GroupMember(u32, Address)` | Boolean flag indicating whether a wallet is a group member |
 | `Pool(u32, u32)` | Stores a `Pool` struct keyed by `(group_id, pool_id)` |
@@ -232,6 +273,7 @@ The contract (`contracts/src/lib.rs`) is written in Rust using [soroban-sdk 22](
 
 | Function | Auth Required | Description |
 |---|---|---|
+| `set_rewards_contract(admin, rewards_contract)` | `admin` | Links the core contract to the deployed rewards contract so deposits can forward contribution data. |
 | `create_group(owner, name, asset)` | `owner` | Creates a new group. Owner is automatically added as the first member. Returns the new `group_id`. |
 | `add_member(owner, group_id, member)` | `owner` | Adds a wallet address as a group member. Only the group owner can call this. |
 | `create_pool(creator, group_id, name)` | `creator` | Creates a pool inside a group. Caller must be a group member and becomes the pool organizer. Returns the new `pool_id`. |
@@ -242,6 +284,7 @@ The contract (`contracts/src/lib.rs`) is written in Rust using [soroban-sdk 22](
 
 | Function | Returns | Description |
 |---|---|---|
+| `rewards_contract(env)` | `Option<Address>` | Returns the currently linked rewards contract, if configured. |
 | `group_count(env)` | `u32` | Total number of groups created |
 | `group(env, group_id)` | `Result<Group, Error>` | Fetches a group by ID |
 | `pool(env, group_id, pool_id)` | `Result<Pool, Error>` | Fetches a pool by group and pool ID |
@@ -260,13 +303,32 @@ The contract (`contracts/src/lib.rs`) is written in Rust using [soroban-sdk 22](
 | `6` | `NotGroupMember` | Caller is not a member of the group |
 | `7` | `InsufficientPoolBalance` | Pool does not have enough balance to fulfill the withdrawal |
 | `8` | `NameRequired` | Group or pool name is empty |
+| `9` | `ArithmeticOverflow` | Arithmetic update exceeded the supported integer range |
 
 ### On-Chain Events
 
 | Topic | Data | Emitted By |
 |---|---|---|
+| `("rewards_linked")` | `rewards_contract: Address` | `set_rewards_contract` |
 | `("deposit", group_id, pool_id)` | `(from: Address, amount: i128)` | `deposit` |
 | `("withdraw", group_id, pool_id)` | `(organizer: Address, to: Address, amount: i128)` | `withdraw` |
+
+### Rewards Contract Reference
+
+The rewards contract (`contracts/rewards/src/lib.rs`) stores TLMBG metadata and balances separately from the core pooling logic.
+
+| Function | Description |
+|---|---|
+| `set_core_contract(admin, core_contract)` | Admin-only binding step that authorizes the Talambag core contract to register groups and record contributions. |
+| `is_group_registered(group_id)` | Returns whether a Talambag group has been registered in rewards storage. |
+| `metadata()` | Returns the rewards token name, symbol, and decimals. |
+| `pending_reward(group_id, owner)` | Returns the wallet's unclaimed TLMBG for a specific group. |
+| `contributed_amount(group_id, owner)` | Returns the reward-weighted contributed total for a wallet within a group. |
+| `claim_rewards(user, group_id)` | Verifies group membership through Talambag core, mints pending TLMBG, and resets the user's pending balance to zero. |
+| `balance(owner)` | Returns the wallet's claimed TLMBG balance. |
+| `total_supply()` | Returns the total amount of TLMBG minted across all groups. |
+
+`register_group` and `record_contribution` are intended to be called by the linked Talambag core contract, not by end users directly.
 
 ---
 
@@ -290,7 +352,7 @@ The frontend is a **Next.js 15** application written in TypeScript with React 19
 |---|---|---|
 | `/` | `src/app/page.tsx` | Dashboard: total group count, wallet status, XLM balance, searchable group list, create-group button |
 | `/groups/[groupId]` | `src/app/groups/[groupId]/page.tsx` | Group detail: member count, pool list, add-member (owner only), create-pool (members only) |
-| `/groups/[groupId]/pools/[poolId]` | `src/app/groups/[groupId]/pools/[poolId]/page.tsx` | Pool detail: balance, deposit button (members), withdraw form (organizer only), event history |
+| `/groups/[groupId]/pools/[poolId]` | `src/app/groups/[groupId]/pools/[poolId]/page.tsx` | Pool detail: balance, deposit button (members), withdraw form (organizer only), rewards dashboard, claim action, and event history |
 
 ### API Routes
 
@@ -317,6 +379,15 @@ All Soroban contract interactions live here.
 | `getContractSnapshot(groupId, poolId, walletAddress)` | Reads group, pool, and membership in one batch. Used on page load. |
 | `fetchPoolEvents(groupId, poolId)` | Calls `/api/contract-events`, filters by pool, and returns `PoolEvent[]`. |
 | `classifyError(error)` | Classifies any error as `wallet_not_found`, `rejected`, `insufficient_balance`, or `other`. |
+
+#### `rewards-client.ts`
+
+All rewards-contract reads and writes live here.
+
+| Function | Description |
+|---|---|
+| `getRewardSnapshot(walletAddress, groupId)` | Reads rewards metadata, wallet balance, pending reward, contribution total, registration state, and total supply for the current group view. |
+| `claimGroupRewards(walletAddress, groupId, onSubmitting)` | Signs and submits `claim_rewards`. Returns the transaction hash and claimed TLMBG amount. |
 
 #### `wallet-kit.ts`
 
@@ -433,33 +504,31 @@ pnpm install
 cd ..
 ```
 
-### Step 3 — Build and test the smart contract
+### Step 3 — Build and test both smart contracts
 
 ```bash
 cd contracts
-cargo test
+cargo test --workspace
 stellar contract build
-cd ..
+cd rewards
+stellar contract build
+cd ../..
 ```
 
 Expected WASM output:
 
 ```
 contracts/target/wasm32v1-none/release/talambag.wasm
+contracts/target/wasm32v1-none/release/talambag_rewards.wasm
 ```
 
 > **Important:** Always use `stellar contract build`. Do not use `cargo build --target wasm32-unknown-unknown` — that produces an incompatible artifact.
 
-### Step 4 — (Optional) Deploy your own contract to Testnet
+> **Workspace note:** `contracts/` is a Cargo workspace, so both WASM artifacts are emitted under `contracts/target/...`.
 
-```bash
-stellar contract deploy \
-  --wasm contracts/target/wasm32v1-none/release/talambag.wasm \
-  --source <YOUR_STELLAR_SECRET_KEY_OR_ALIAS> \
-  --network testnet
-```
+### Step 4 — (Optional) Deploy and bind the contracts on Testnet
 
-The command returns a contract address (`CD...`). Use it as `NEXT_PUBLIC_TALAMBAG_CONTRACT_ID`.
+Follow the manual CLI flow in [Deploying to Testnet](#deploying-to-testnet) below. You will need both returned contract IDs, and the binding calls are required before rewards start accruing on deposits.
 
 To get a Stellar Asset Contract address for native XLM on testnet:
 
@@ -485,14 +554,27 @@ NEXT_PUBLIC_STELLAR_RPC_URL=https://soroban-testnet.stellar.org
 NEXT_PUBLIC_STELLAR_NETWORK=TESTNET
 NEXT_PUBLIC_STELLAR_NETWORK_PASSPHRASE=Test SDF Network ; September 2015
 NEXT_PUBLIC_TALAMBAG_CONTRACT_ID=CD44KFLGE2ISRUD6Q5BZTX3NI4ILTD5QUIWIED255UJDRAFJSR7GYIJE
+NEXT_PUBLIC_TALAMBAG_REWARDS_CONTRACT_ID=<DEPLOYED_REWARDS_CONTRACT_ID>
 NEXT_PUBLIC_TALAMBAG_ASSET_ADDRESS=CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC
 NEXT_PUBLIC_TALAMBAG_ASSET_CODE=XLM
 NEXT_PUBLIC_TALAMBAG_ASSET_DECIMALS=7
 NEXT_PUBLIC_STELLAR_EXPLORER_URL=https://stellar.expert/explorer/testnet
 NEXT_PUBLIC_STELLAR_READ_ADDRESS=<FUNDED_TESTNET_WALLET_ADDRESS>
+NEXT_PUBLIC_TALAMBAG_INDEXER_URL=http://localhost:8080
 ```
 
-### Step 6 — Start the development server
+### Step 6 — Configure and start the realtime indexer
+
+```bash
+cd indexer
+cp .env.example .env
+pnpm install
+pnpm dev
+```
+
+Populate `indexer/.env` with your Neon connection string, Talambag core contract ID, rewards contract ID, and the RPC endpoint you want to poll.
+
+### Step 7 — Start the development server
 
 ```bash
 cd frontend
@@ -511,12 +593,27 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 | `NEXT_PUBLIC_STELLAR_NETWORK` | Yes | Network name: `TESTNET` or `PUBLIC`. |
 | `NEXT_PUBLIC_STELLAR_NETWORK_PASSPHRASE` | Yes | Network passphrase string. |
 | `NEXT_PUBLIC_TALAMBAG_CONTRACT_ID` | Yes | The deployed Soroban contract address. |
+| `NEXT_PUBLIC_TALAMBAG_REWARDS_CONTRACT_ID` | Yes | The deployed Soroban rewards token contract address. |
 | `NEXT_PUBLIC_TALAMBAG_ASSET_ADDRESS` | Yes | Stellar asset contract address used for contributions. |
 | `NEXT_PUBLIC_TALAMBAG_ASSET_CODE` | Yes | Human-readable asset code, e.g. `XLM`. |
 | `NEXT_PUBLIC_TALAMBAG_ASSET_DECIMALS` | Yes | Decimal places for the asset (`7` for XLM). |
 | `NEXT_PUBLIC_STELLAR_EXPLORER_URL` | Yes | Base URL for Stellar Expert, used for transaction and contract links. |
 | `NEXT_PUBLIC_STELLAR_READ_ADDRESS` | Yes | A funded testnet wallet address used as the fee source for read-only simulations. |
 | `NEXT_PUBLIC_STELLAR_HORIZON_URL` | No | Horizon server URL for XLM balance lookups. Defaults to `https://horizon-testnet.stellar.org`. |
+| `NEXT_PUBLIC_TALAMBAG_INDEXER_URL` | Yes for realtime streaming | Base URL of the separate Talambag indexer service, e.g. `http://localhost:8080`. |
+
+### Indexer Variables
+
+| Variable | Required | Description |
+|---|---|---|
+| `INDEXER_DATABASE_URL` | Yes | Neon Postgres connection string used to persist cursors and normalized events. |
+| `INDEXER_STELLAR_RPC_URL` | Yes | Stellar RPC endpoint that supports `getEvents`. |
+| `INDEXER_CORE_CONTRACT_ID` | Yes | Talambag core contract ID to index. |
+| `INDEXER_REWARD_CONTRACT_ID` | Yes | Rewards contract ID to index. |
+| `INDEXER_ALLOWED_ORIGIN` | Yes | CORS origin allowed to consume the SSE stream. |
+| `INDEXER_POLL_INTERVAL_MS` | No | Polling cadence in milliseconds. Defaults to `4000`. |
+| `INDEXER_BATCH_LIMIT` | No | Maximum events to fetch per `getEvents` request. Defaults to `200`. |
+| `INDEXER_START_LEDGER` | No | Optional ledger sequence to use for initial backfill. |
 
 ---
 
@@ -535,29 +632,113 @@ pnpm lint
 pnpm build
 ```
 
+From `indexer/`:
+
+```bash
+# Install dependencies once
+pnpm install
+
+# Strict type-check
+pnpm run typecheck
+
+# Production build
+pnpm run build
+```
+
 From `contracts/`:
 
 ```bash
 # Run all Soroban unit tests
-cargo test
+cargo test --workspace
 ```
 
 ---
 
 ## Deploying to Testnet
 
-### Smart Contract
+### Smart Contracts
+
+#### Manual CLI Flow
 
 ```bash
-stellar contract deploy \
-  --wasm contracts/target/wasm32v1-none/release/talambag.wasm \
-  --source <YOUR_STELLAR_SECRET_KEY_OR_ALIAS> \
-  --network testnet
+cd contracts
+stellar contract build
+cd rewards
+stellar contract build
+cd ..
+
+DEPLOYER_ALIAS=<YOUR_STELLAR_KEY_ALIAS>
+ADMIN_ADDRESS=<YOUR_PUBLIC_ADMIN_ADDRESS>
+
+CORE_CONTRACT_ID=$(stellar contract deploy \
+  --wasm target/wasm32v1-none/release/talambag.wasm \
+  --source-account "$DEPLOYER_ALIAS" \
+  --network testnet \
+  -- \
+  --admin "$ADMIN_ADDRESS")
+
+REWARDS_CONTRACT_ID=$(stellar contract deploy \
+  --wasm target/wasm32v1-none/release/talambag_rewards.wasm \
+  --source-account "$DEPLOYER_ALIAS" \
+  --network testnet \
+  -- \
+  --admin "$ADMIN_ADDRESS" \
+  --name "Talambag Rewards" \
+  --symbol "TLMBG" \
+  --decimals 7)
+
+stellar contract invoke \
+  --id "$CORE_CONTRACT_ID" \
+  --source-account "$DEPLOYER_ALIAS" \
+  --network testnet \
+  -- set_rewards_contract \
+  --admin "$ADMIN_ADDRESS" \
+  --rewards_contract "$REWARDS_CONTRACT_ID"
+
+stellar contract invoke \
+  --id "$REWARDS_CONTRACT_ID" \
+  --source-account "$DEPLOYER_ALIAS" \
+  --network testnet \
+  -- set_core_contract \
+  --admin "$ADMIN_ADDRESS" \
+  --core_contract "$CORE_CONTRACT_ID"
+
+stellar contract invoke \
+  --id "$CORE_CONTRACT_ID" \
+  --source-account "$DEPLOYER_ALIAS" \
+  --network testnet \
+  -- rewards_contract
+
+stellar contract invoke \
+  --id "$REWARDS_CONTRACT_ID" \
+  --source-account "$DEPLOYER_ALIAS" \
+  --network testnet \
+  -- core_contract
 ```
+
+The deploy commands return contract IDs (`CD...`). Use the core ID as `NEXT_PUBLIC_TALAMBAG_CONTRACT_ID` and `INDEXER_CORE_CONTRACT_ID`, and use the rewards ID as `NEXT_PUBLIC_TALAMBAG_REWARDS_CONTRACT_ID` and `INDEXER_REWARD_CONTRACT_ID`.
+
+> **Important:** Binding is not optional in a rewards-enabled deployment. Until `set_rewards_contract` and `set_core_contract` are both called successfully, deposits only affect the core contract and no rewards activity appears on the rewards contract.
+
+> **Legacy group note:** If a group was created before the rewards contract was linked, the first successful post-link deposit will register that group in rewards automatically before recording contribution data.
+
+#### GitHub Actions Flow
+
+The GitHub Actions workflow at `.github/workflows/ci-and-deploy.yml` runs on every pull request and on every push to `main`. On `main`, after all contract, frontend, and indexer checks pass, it automatically:
+
+1. deploys a fresh Talambag core contract to testnet,
+2. deploys a fresh rewards contract to testnet,
+3. links both contracts with `set_rewards_contract` and `set_core_contract`, and
+4. uploads a `deployment.env` artifact containing the new contract IDs.
+
+Configure these GitHub repository secrets before enabling automatic deployment:
+
+- `STELLAR_TESTNET_SECRET_KEY`
+- `STELLAR_TESTNET_ADMIN_ADDRESS`
 
 ### Frontend
 
-The frontend is deployed on [Vercel](https://vercel.com). Push to `main` to trigger a production deployment. Set all `NEXT_PUBLIC_*` environment variables in the Vercel project settings before deploying.
+The frontend is deployed on [Vercel](https://vercel.com). Push to `main` to trigger a production deployment. Set all `NEXT_PUBLIC_*` environment variables in the Vercel project settings before deploying, including the core contract ID, rewards contract ID, and indexer URL.
 
 ---
 
@@ -570,7 +751,7 @@ The following examples use the Stellar CLI to invoke the deployed contract direc
 ```bash
 stellar contract invoke \
   --id CD44KFLGE2ISRUD6Q5BZTX3NI4ILTD5QUIWIED255UJDRAFJSR7GYIJE \
-  --source <GROUP_OWNER_KEY_ALIAS> \
+  --source-account <GROUP_OWNER_KEY_ALIAS> \
   --network testnet \
   -- create_group \
   --owner <GROUP_OWNER_ADDRESS> \
@@ -583,7 +764,7 @@ stellar contract invoke \
 ```bash
 stellar contract invoke \
   --id CD44KFLGE2ISRUD6Q5BZTX3NI4ILTD5QUIWIED255UJDRAFJSR7GYIJE \
-  --source <GROUP_OWNER_KEY_ALIAS> \
+  --source-account <GROUP_OWNER_KEY_ALIAS> \
   --network testnet \
   -- add_member \
   --owner <GROUP_OWNER_ADDRESS> \
@@ -596,7 +777,7 @@ stellar contract invoke \
 ```bash
 stellar contract invoke \
   --id CD44KFLGE2ISRUD6Q5BZTX3NI4ILTD5QUIWIED255UJDRAFJSR7GYIJE \
-  --source <MEMBER_KEY_ALIAS> \
+  --source-account <MEMBER_KEY_ALIAS> \
   --network testnet \
   -- create_pool \
   --creator <MEMBER_ADDRESS> \
@@ -609,7 +790,7 @@ stellar contract invoke \
 ```bash
 stellar contract invoke \
   --id CD44KFLGE2ISRUD6Q5BZTX3NI4ILTD5QUIWIED255UJDRAFJSR7GYIJE \
-  --source <CONTRIBUTOR_KEY_ALIAS> \
+  --source-account <CONTRIBUTOR_KEY_ALIAS> \
   --network testnet \
   -- deposit \
   --from <CONTRIBUTOR_ADDRESS> \
@@ -623,7 +804,7 @@ stellar contract invoke \
 ```bash
 stellar contract invoke \
   --id CD44KFLGE2ISRUD6Q5BZTX3NI4ILTD5QUIWIED255UJDRAFJSR7GYIJE \
-  --source <ORGANIZER_KEY_ALIAS> \
+  --source-account <ORGANIZER_KEY_ALIAS> \
   --network testnet \
   -- withdraw \
   --organizer <ORGANIZER_ADDRESS> \
@@ -638,7 +819,7 @@ stellar contract invoke \
 ```bash
 stellar contract invoke \
   --id CD44KFLGE2ISRUD6Q5BZTX3NI4ILTD5QUIWIED255UJDRAFJSR7GYIJE \
-  --source <ANY_KEY_ALIAS> \
+  --source-account <ANY_KEY_ALIAS> \
   --network testnet \
   -- group \
   --group_id 1
@@ -649,11 +830,46 @@ stellar contract invoke \
 ```bash
 stellar contract invoke \
   --id CD44KFLGE2ISRUD6Q5BZTX3NI4ILTD5QUIWIED255UJDRAFJSR7GYIJE \
-  --source <ANY_KEY_ALIAS> \
+  --source-account <ANY_KEY_ALIAS> \
   --network testnet \
   -- pool \
   --group_id 1 \
   --pool_id 1
+```
+
+**Read pending rewards:**
+
+```bash
+stellar contract invoke \
+  --id <REWARDS_CONTRACT_ID> \
+  --source-account <ANY_KEY_ALIAS> \
+  --network testnet \
+  -- pending_reward \
+  --group_id 1 \
+  --owner <CONTRIBUTOR_ADDRESS>
+```
+
+**Read claimed TLMBG balance:**
+
+```bash
+stellar contract invoke \
+  --id <REWARDS_CONTRACT_ID> \
+  --source-account <ANY_KEY_ALIAS> \
+  --network testnet \
+  -- balance \
+  --owner <CONTRIBUTOR_ADDRESS>
+```
+
+**Claim rewards:**
+
+```bash
+stellar contract invoke \
+  --id <REWARDS_CONTRACT_ID> \
+  --source-account <CONTRIBUTOR_KEY_ALIAS> \
+  --network testnet \
+  -- claim_rewards \
+  --user <CONTRIBUTOR_ADDRESS> \
+  --group_id 1
 ```
 
 ---

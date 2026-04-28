@@ -12,6 +12,15 @@ type WalletNotice = {
 function getWalletNotice(
   wallet: ReturnType<typeof useWallet>["wallet"],
 ): WalletNotice | null {
+  if (wallet.isCached) {
+    return {
+      tone: "warning",
+      title: "Showing cached wallet details",
+      detail:
+        "This wallet state was restored from local cache. Refresh while online before creating groups, pools, or transactions.",
+    };
+  }
+
   if (wallet.status === "connected" && wallet.isNetworkVerified && !wallet.isExpectedNetwork) {
     const connectedNetwork = wallet.network ?? wallet.networkPassphrase ?? "Unknown network";
 

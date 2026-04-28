@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useWallet } from "@/contexts/wallet-context";
@@ -8,29 +8,54 @@ import { SearchBar } from "@/components/search-bar";
 import { FeedbackBanner } from "@/components/feedback-banner";
 import { AddMemberModal } from "@/components/add-member-modal";
 import { CreatePoolModal } from "@/components/create-pool-modal";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import { appConfig } from "@/lib/config";
 import { formatAmount, shortenAddress } from "@/lib/format";
+import {
+  invalidateGroupCachesForEvent,
+  subscribeToContractEvents,
+} from "@/lib/realtime-events";
 import { getContractSnapshot, listPools } from "@/lib/talambag-client";
-import type { GroupSummary, PoolSummary, TxFeedback } from "@/lib/types";
+import {
+  GROUP_PAGE_REALTIME_EVENT_TYPES,
+  type GroupSummary,
+  type PoolSummary,
+  type TxFeedback,
+} from "@/lib/types";
+import { parsePositiveIntegerParam } from "@/lib/validators";
 
 export default function GroupPage() {
   const params = useParams();
-  const groupId = Number(params.groupId);
+  const groupId = parsePositiveIntegerParam(params.groupId);
   const { wallet } = useWallet();
+  const isWalletReady =
+    wallet.status === "connected" && wallet.isExpectedNetwork && !wallet.isCached;
 
   const [group, setGroup] = useState<GroupSummary | null>(null);
   const [pools, setPools] = useState<PoolSummary[]>([]);
   const [isMember, setIsMember] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(groupId !== null);
   const [search, setSearch] = useState("");
   const [showAddMember, setShowAddMember] = useState(false);
   const [showCreatePool, setShowCreatePool] = useState(false);
   const [feedback, setFeedback] = useState<TxFeedback>({ state: "idle", title: "" });
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isOwner = wallet.address !== null && group !== null && wallet.address === group.owner;
 
-  const loadGroup = useCallback(async () => {
-    setIsLoading(true);
+  const loadGroup = useCallback(async ({ showLoading = true }: { showLoading?: boolean } = {}) => {
+    if (groupId === null) {
+      setGroup(null);
+      setPools([]);
+      setIsMember(false);
+      setIsLoading(false);
+      return;
+    }
+
+    if (showLoading) {
+      setIsLoading(true);
+    }
+
     try {
       const snapshot = await getContractSnapshot(groupId, null, wallet.address);
       if (snapshot.group) {
@@ -48,13 +73,56 @@ export default function GroupPage() {
         detail: error instanceof Error ? error.message : "Failed to load group.",
       });
     } finally {
-      setIsLoading(false);
+      if (showLoading) {
+        setIsLoading(false);
+      }
     }
   }, [groupId, wallet.address]);
 
+  const scheduleRealtimeRefresh = useCallback(() => {
+    if (refreshTimerRef.current !== null) {
+      clearTimeout(refreshTimerRef.current);
+    }
+
+    refreshTimerRef.current = setTimeout(() => {
+      refreshTimerRef.current = null;
+      void loadGroup({ showLoading: false });
+    }, 250);
+  }, [loadGroup]);
+
   useEffect(() => {
-    if (groupId) void loadGroup();
+    if (groupId !== null) {
+      void loadGroup();
+      return;
+    }
+
+    setGroup(null);
+    setPools([]);
+    setIsMember(false);
+    setIsLoading(false);
   }, [groupId, loadGroup]);
+
+  useEffect(() => {
+    return () => {
+      if (refreshTimerRef.current !== null) {
+        clearTimeout(refreshTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (groupId === null) {
+      return;
+    }
+
+    return subscribeToContractEvents(
+      { eventTypes: GROUP_PAGE_REALTIME_EVENT_TYPES, groupId },
+      (event) => {
+        invalidateGroupCachesForEvent(event);
+        scheduleRealtimeRefresh();
+      },
+    );
+  }, [groupId, scheduleRealtimeRefresh]);
 
   const searchLower = search.toLowerCase().trim();
   const filteredPools = searchLower
@@ -67,6 +135,18 @@ export default function GroupPage() {
         <span className="spinner" aria-hidden="true" />
         Loading group...
       </div>
+    );
+  }
+
+  if (groupId === null) {
+    return (
+      <>
+        <Link href="/" className="back-link">&larr; Back to dashboard</Link>
+        <div className="empty-state">
+          <h3>Invalid group ID</h3>
+          <p>Use a valid positive group ID in the URL.</p>
+        </div>
+      </>
     );
   }
 
@@ -96,24 +176,24 @@ export default function GroupPage() {
         </div>
         <div className="page-header-actions">
           {isOwner && (
-            <button className="primary-button" onClick={() => setShowAddMember(true)}>
+            <button className="primary-button" onClick={() => setShowAddMember(true)} disabled={!isWalletReady}>
               Add member
             </button>
           )}
           {isMember && (
-            <button className="primary-button" onClick={() => setShowCreatePool(true)}>
+            <button className="primary-button" onClick={() => setShowCreatePool(true)} disabled={!isWalletReady}>
               Create pool
             </button>
           )}
         </div>
       </div>
 
-      <section className="status-grid" style={{ gridTemplateColumns: "repeat(4, minmax(0, 1fr))" }}>
+      <section className="status-grid status-grid--group">
         <article className="metric-card">
           <span className="metric-label">Owner</span>
           <strong className="metric-value address">{shortenAddress(group.owner)}</strong>
           <span className="metric-detail">
-            <button className="inline-link" onClick={() => void navigator.clipboard.writeText(group.owner)}>
+            <button className="inline-link" onClick={() => void copyTextToClipboard(group.owner)}>
               Copy address
             </button>
           </span>
@@ -141,11 +221,12 @@ export default function GroupPage() {
 
       <FeedbackBanner feedback={feedback} />
 
-      <section style={{ marginTop: 28 }}>
-        <h2 style={{ margin: "0 0 12px", fontSize: "1.35rem" }}>Pools</h2>
+      <section className="section-block">
+        <h2 className="section-title">Pools</h2>
         <SearchBar
           value={search}
           onChange={setSearch}
+          label="Search pools"
           placeholder="Search pools by name..."
         />
 
@@ -179,7 +260,7 @@ export default function GroupPage() {
       <AddMemberModal
         open={showAddMember}
         onClose={() => setShowAddMember(false)}
-        onAdded={() => void loadGroup()}
+        onAdded={() => void loadGroup({ showLoading: false })}
         groupId={groupId}
         onSuccessFeedback={setFeedback}
       />
@@ -187,7 +268,7 @@ export default function GroupPage() {
       <CreatePoolModal
         open={showCreatePool}
         onClose={() => setShowCreatePool(false)}
-        onCreated={() => void loadGroup()}
+        onCreated={() => void loadGroup({ showLoading: false })}
         groupId={groupId}
         onSuccessFeedback={setFeedback}
       />
