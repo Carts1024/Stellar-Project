@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type RefObject } from "react";
 import { useWallet } from "@/contexts/wallet-context";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import { formatXlmBalance, shortenAddress } from "@/lib/format";
 import type { WalletSnapshot } from "@/lib/types";
 
@@ -32,19 +33,30 @@ function AccountDropdown({
   wallet,
   isBusy,
   onDisconnect,
+  dropdownId,
+  dropdownRef,
 }: {
   readonly wallet: WalletSnapshot;
   readonly isBusy: boolean;
   readonly onDisconnect: () => void;
+  readonly dropdownId: string;
+  readonly dropdownRef: RefObject<HTMLDivElement | null>;
 }) {
-  function handleCopyAddress() {
+  async function handleCopyAddress() {
     if (wallet.address) {
-      void navigator.clipboard.writeText(wallet.address);
+      await copyTextToClipboard(wallet.address);
     }
   }
 
   return (
-    <div className="wb-dropdown" role="menu" aria-label="Wallet options">
+    <div
+      className="wb-dropdown"
+      role="menu"
+      aria-label="Wallet options"
+      aria-orientation="vertical"
+      id={dropdownId}
+      ref={dropdownRef}
+    >
       <div className="wb-dropdown-header">
         <WalletAvatar name={wallet.walletName} />
         <div className="wb-dropdown-identity">
@@ -62,6 +74,8 @@ function AccountDropdown({
           className="wb-copy-btn"
           onClick={handleCopyAddress}
           aria-label={`Copy address ${wallet.address ?? ""}`}
+          data-autofocus="true"
+          role="menuitem"
           title="Click to copy full address"
         >
           {wallet.address}
@@ -106,6 +120,8 @@ export function WalletButton() {
   const [isOpen, setIsOpen] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const dropdownId = useId();
 
   useEffect(() => {
     if (!isOpen) return;
@@ -129,6 +145,15 @@ export function WalletButton() {
       document.removeEventListener("pointerdown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const firstAction = dropdownRef.current?.querySelector<HTMLElement>("[data-autofocus='true']");
+    firstAction?.focus();
   }, [isOpen]);
 
   async function handleConnect() {
@@ -161,6 +186,7 @@ export function WalletButton() {
           className={`wb-account-btn${isOpen ? " wb-account-btn--open" : ""}`}
           onClick={() => setIsOpen((prev) => !prev)}
           aria-haspopup="menu"
+          aria-controls={dropdownId}
           aria-expanded={isOpen}
           disabled={isBusy}
         >
@@ -182,7 +208,13 @@ export function WalletButton() {
         </button>
 
         {isOpen && (
-          <AccountDropdown wallet={wallet} isBusy={isBusy} onDisconnect={handleDisconnect} />
+          <AccountDropdown
+            wallet={wallet}
+            isBusy={isBusy}
+            onDisconnect={handleDisconnect}
+            dropdownId={dropdownId}
+            dropdownRef={dropdownRef}
+          />
         )}
       </div>
     );

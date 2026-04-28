@@ -8,6 +8,7 @@ import { SearchBar } from "@/components/search-bar";
 import { FeedbackBanner } from "@/components/feedback-banner";
 import { AddMemberModal } from "@/components/add-member-modal";
 import { CreatePoolModal } from "@/components/create-pool-modal";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import { appConfig } from "@/lib/config";
 import { formatAmount, shortenAddress } from "@/lib/format";
 import {
@@ -27,6 +28,8 @@ export default function GroupPage() {
   const params = useParams();
   const groupId = parsePositiveIntegerParam(params.groupId);
   const { wallet } = useWallet();
+  const isWalletReady =
+    wallet.status === "connected" && wallet.isExpectedNetwork && !wallet.isCached;
 
   const [group, setGroup] = useState<GroupSummary | null>(null);
   const [pools, setPools] = useState<PoolSummary[]>([]);
@@ -173,24 +176,24 @@ export default function GroupPage() {
         </div>
         <div className="page-header-actions">
           {isOwner && (
-            <button className="primary-button" onClick={() => setShowAddMember(true)}>
+            <button className="primary-button" onClick={() => setShowAddMember(true)} disabled={!isWalletReady}>
               Add member
             </button>
           )}
           {isMember && (
-            <button className="primary-button" onClick={() => setShowCreatePool(true)}>
+            <button className="primary-button" onClick={() => setShowCreatePool(true)} disabled={!isWalletReady}>
               Create pool
             </button>
           )}
         </div>
       </div>
 
-      <section className="status-grid" style={{ gridTemplateColumns: "repeat(4, minmax(0, 1fr))" }}>
+      <section className="status-grid status-grid--group">
         <article className="metric-card">
           <span className="metric-label">Owner</span>
           <strong className="metric-value address">{shortenAddress(group.owner)}</strong>
           <span className="metric-detail">
-            <button className="inline-link" onClick={() => void navigator.clipboard.writeText(group.owner)}>
+            <button className="inline-link" onClick={() => void copyTextToClipboard(group.owner)}>
               Copy address
             </button>
           </span>
@@ -218,11 +221,12 @@ export default function GroupPage() {
 
       <FeedbackBanner feedback={feedback} />
 
-      <section style={{ marginTop: 28 }}>
-        <h2 style={{ margin: "0 0 12px", fontSize: "1.35rem" }}>Pools</h2>
+      <section className="section-block">
+        <h2 className="section-title">Pools</h2>
         <SearchBar
           value={search}
           onChange={setSearch}
+          label="Search pools"
           placeholder="Search pools by name..."
         />
 

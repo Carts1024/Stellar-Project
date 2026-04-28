@@ -20,6 +20,8 @@ import {
 
 export default function DashboardPage() {
   const { wallet } = useWallet();
+  const isWalletReady =
+    wallet.status === "connected" && wallet.isExpectedNetwork && !wallet.isCached;
   const [groups, setGroups] = useState<GroupSummary[]>([]);
   const [totalGroups, setTotalGroups] = useState(0);
   const [search, setSearch] = useState("");
@@ -102,7 +104,7 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      <section className="status-grid" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))", marginTop: 22 }}>
+      <section className="status-grid status-grid--dashboard">
         <article className="metric-card spotlight">
           <span className="metric-label">Total groups</span>
           <strong className="metric-value">{totalGroups}</strong>
@@ -126,11 +128,19 @@ export default function DashboardPage() {
         <article className="metric-card">
           <span className="metric-label">Network</span>
           <strong className="metric-value address">
-            {wallet.isExpectedNetwork ? "Connected" : wallet.status === "connected" ? "Mismatch" : "--"}
+            {isWalletReady
+              ? "Connected"
+              : wallet.status === "connected"
+                ? wallet.isCached
+                  ? "Cached"
+                  : "Mismatch"
+                : "--"}
           </strong>
           <span className="metric-detail">
-            {wallet.isExpectedNetwork
+            {isWalletReady
               ? "Ready for transactions"
+              : wallet.isCached
+                ? "Reconnect online to resume wallet actions"
               : wallet.status === "connected"
                 ? "Switch the connected wallet to the correct network"
                 : "Connect wallet to begin"}
@@ -138,17 +148,17 @@ export default function DashboardPage() {
         </article>
       </section>
 
-      <section style={{ marginTop: 28 }}>
+      <section className="section-block">
         <div className="page-header">
           <div>
-            <h2 style={{ margin: 0, fontSize: "1.5rem" }}>Groups</h2>
+            <h2 className="section-title section-title--large">Groups</h2>
             <p className="page-subtitle">Browse and manage community groups</p>
           </div>
           <div className="page-header-actions">
             <button
               className="primary-button"
               onClick={() => setShowCreateModal(true)}
-              disabled={wallet.status !== "connected" || !wallet.isExpectedNetwork}
+              disabled={!isWalletReady}
             >
               Create group
             </button>
@@ -160,6 +170,7 @@ export default function DashboardPage() {
         <SearchBar
           value={search}
           onChange={setSearch}
+          label="Search groups"
           placeholder="Search by group name or ID..."
         />
 

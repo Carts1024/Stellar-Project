@@ -394,7 +394,11 @@ async function readPool(groupId: number, poolId: number) {
 }
 
 async function readMembership(groupId: number, walletAddress: string) {
-  return simulateRead(
+  const key = `membership:${groupId}:${walletAddress}`;
+  const cached = getCached<boolean>(key);
+  if (cached !== undefined) return cached;
+
+  const result = await simulateRead(
     getReadAddress(),
     "is_member",
     buildArgs([
@@ -403,6 +407,9 @@ async function readMembership(groupId: number, walletAddress: string) {
     ]),
     normalizeBoolean,
   );
+
+  setCached(key, result);
+  return result;
 }
 
 export async function getContractSnapshot(

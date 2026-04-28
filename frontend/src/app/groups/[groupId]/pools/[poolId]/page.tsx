@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { useWallet } from "@/contexts/wallet-context";
 import { FeedbackBanner } from "@/components/feedback-banner";
 import { DepositModal } from "@/components/deposit-modal";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import { appConfig } from "@/lib/config";
 import { formatAmount, parseAmountToInt, shortenAddress } from "@/lib/format";
 import {
@@ -41,6 +42,8 @@ export default function PoolPage() {
   const groupId = parsePositiveIntegerParam(params.groupId);
   const poolId = parsePositiveIntegerParam(params.poolId);
   const { wallet } = useWallet();
+  const isWalletReady =
+    wallet.status === "connected" && wallet.isExpectedNetwork && !wallet.isCached;
 
   const [group, setGroup] = useState<GroupSummary | null>(null);
   const [pool, setPool] = useState<PoolSummary | null>(null);
@@ -323,7 +326,7 @@ export default function PoolPage() {
         </div>
         <div className="page-header-actions">
           {isMember && (
-            <button className="primary-button" onClick={() => setShowDeposit(true)}>
+            <button className="primary-button" onClick={() => setShowDeposit(true)} disabled={!isWalletReady}>
               Deposit {appConfig.assetCode}
             </button>
           )}
@@ -344,7 +347,7 @@ export default function PoolPage() {
           <span className="metric-detail">
             <button
               className="inline-link"
-              onClick={() => void navigator.clipboard.writeText(pool.organizer)}
+              onClick={() => void copyTextToClipboard(pool.organizer)}
             >
               Copy address
             </button>
@@ -417,8 +420,7 @@ export default function PoolPage() {
               onClick={() => void handleClaimRewards()}
               disabled={
                 isClaimingRewards ||
-                !wallet.address ||
-                !wallet.isExpectedNetwork ||
+                !isWalletReady ||
                 !isMember ||
                 rewardSnapshot.pendingReward <= 0n ||
                 rewardSnapshot.status === "error"
@@ -477,7 +479,7 @@ export default function PoolPage() {
               type="submit"
               disabled={
                 isWithdrawing ||
-                !wallet.isExpectedNetwork ||
+                !isWalletReady ||
                 !withdrawAmount.trim() ||
                 !isValidRecipient
               }
@@ -489,8 +491,8 @@ export default function PoolPage() {
       )}
 
       {/* Transaction History */}
-      <section style={{ marginTop: 28 }}>
-        <h2 style={{ margin: "0 0 12px", fontSize: "1.35rem" }}>Transaction History</h2>
+      <section className="section-block">
+        <h2 className="section-title">Transaction History</h2>
         {eventsLoading ? (
           <div className="loading-state">
             <span className="spinner" aria-hidden="true" />

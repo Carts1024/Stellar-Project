@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Modal } from "@/components/modal";
 import { FeedbackBanner } from "@/components/feedback-banner";
 import { useWallet } from "@/contexts/wallet-context";
@@ -18,6 +18,7 @@ type Props = {
 
 export function CreateGroupModal({ open, onClose, onCreated, onSuccessFeedback }: Props) {
   const { wallet } = useWallet();
+  const titleId = useId();
   const [groupName, setGroupName] = useState("");
   const [assetAddress, setAssetAddress] = useState(appConfig.assetAddress);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -28,6 +29,7 @@ export function CreateGroupModal({ open, onClose, onCreated, onSuccessFeedback }
     !isSubmitting &&
     wallet.status === "connected" &&
     wallet.address &&
+    !wallet.isCached &&
     wallet.isExpectedNetwork &&
     groupName.trim() &&
     isValidAsset;
@@ -89,10 +91,10 @@ export function CreateGroupModal({ open, onClose, onCreated, onSuccessFeedback }
   }
 
   return (
-    <Modal open={open} onClose={handleClose}>
+    <Modal open={open} onClose={handleClose} titleId={titleId}>
       <div className="card-head">
         <span className="card-kicker">Group creation</span>
-        <h2>Create a new group</h2>
+        <h2 id={titleId}>Create a new group</h2>
       </div>
       <p className="card-copy">
         The signer becomes the group owner and first member. That owner can add more members later.

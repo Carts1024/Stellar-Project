@@ -1,6 +1,6 @@
 "use client";
 
-import { invalidateCached } from "@/lib/cache";
+import { invalidateCached, invalidateCachedByPrefix } from "@/lib/cache";
 import { appConfig } from "@/lib/config";
 import { fetchPoolEvents } from "@/lib/talambag-client";
 import {
@@ -242,7 +242,14 @@ export async function fetchContractEvents(filters: RealtimeEventFilters): Promis
   const url = new URL("/events", appConfig.indexerUrl);
   appendFiltersToUrl(url, filters, true);
 
-  const response = await fetch(url.toString());
+  let response: Response;
+
+  try {
+    response = await fetch(url.toString());
+  } catch {
+    return [];
+  }
+
   if (!response.ok) {
     throw new Error(`Realtime event API returned HTTP ${response.status}`);
   }
@@ -258,27 +265,86 @@ export function subscribeToContractEvents(
   filters: Readonly<Omit<RealtimeEventFilters, "limit">>,
   onEvent: (event: RealtimeContractEvent) => void,
 ) {
-  if (!appConfig.indexerUrl || typeof EventSource === "undefined") {
+  if (
+    !appConfig.indexerUrl ||
+    typeof EventSource === "undefined" ||
+    typeof window === "undefined"
+  ) {
     return () => undefined;
   }
 
   const url = new URL("/events/stream", appConfig.indexerUrl);
   appendFiltersToUrl(url, filters, false);
 
-  const source = new EventSource(url.toString());
-  source.onmessage = (message) => {
-    try {
-      const event = normalizeIndexedEvent(JSON.parse(message.data) as IndexedEvent);
-      if (event) {
-        onEvent(event);
-      }
-    } catch {
-      // Ignore malformed stream payloads and keep the subscription alive.
+  let reconnectTimerId: ReturnType<typeof setTimeout> | null = null;
+  let source: EventSource | null = null;
+
+  function clearReconnectTimer() {
+    if (reconnectTimerId !== null) {
+      clearTimeout(reconnectTimerId);
+      reconnectTimerId = null;
     }
-  };
+  }
+
+  function closeSource() {
+    if (source) {
+      source.close();
+      source = null;
+    }
+  }
+
+  function scheduleReconnect() {
+    if (reconnectTimerId !== null || !navigator.onLine) {
+      return;
+    }
+
+    reconnectTimerId = setTimeout(() => {
+      reconnectTimerId = null;
+      connect();
+    }, 1_500);
+  }
+
+  function connect() {
+    if (!navigator.onLine || source) {
+      return;
+    }
+
+    source = new EventSource(url.toString());
+    source.onmessage = (message) => {
+      try {
+        const event = normalizeIndexedEvent(JSON.parse(message.data) as IndexedEvent);
+        if (event) {
+          onEvent(event);
+        }
+      } catch {
+        // Ignore malformed stream payloads and keep the subscription alive.
+      }
+    };
+    source.onerror = () => {
+      closeSource();
+      scheduleReconnect();
+    };
+  }
+
+  function handleOnline() {
+    clearReconnectTimer();
+    connect();
+  }
+
+  function handleOffline() {
+    clearReconnectTimer();
+    closeSource();
+  }
+
+  connect();
+  window.addEventListener("online", handleOnline);
+  window.addEventListener("offline", handleOffline);
 
   return () => {
-    source.close();
+    clearReconnectTimer();
+    closeSource();
+    window.removeEventListener("online", handleOnline);
+    window.removeEventListener("offline", handleOffline);
   };
 }
 
@@ -335,6 +401,9 @@ export function invalidateGroupCachesForEvent(event: RealtimeContractEvent) {
     case "member_added":
     case "pool_created":
       invalidateCached(`group:${event.groupId}`);
+      if (event.type === "member_added") {
+        invalidateCachedByPrefix(`membership:${event.groupId}:`);
+      }
       break;
     case "deposit":
     case "withdraw":
