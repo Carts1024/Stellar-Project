@@ -41,4 +41,4 @@ COPY --from=build /app/src/load-env.ts /app/src/load-env.ts
 
 EXPOSE 8080
 
-CMD ["sh", "-c", "pnpm run db:migrate:deploy && pnpm run start"]
+CMD ["sh", "-c", "pnpm run start"]
