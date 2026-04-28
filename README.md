@@ -8,95 +8,207 @@ Instead of collecting money through opaque chat threads and manually tracking wh
 
 ---
 
-## Table of Contents
+## 📖 Table of Contents
 
-- [Live Demo](#live-demo)
-- [Demo Video](#demo-video)
-- [UI Screenshots](#ui-screenshots)
-- [Smart Contract](#smart-contract)
 - [Architecture Overview](#architecture-overview)
-- [Implemented Features](#implemented-features)
+- [Key Features](#key-features)
 - [Project Structure](#project-structure)
-- [Smart Contract Reference](#smart-contract-reference)
-- [Frontend Reference](#frontend-reference)
-- [Project Setup Guide](#project-setup-guide-local-development)
-- [Environment Variables](#environment-variables)
-- [Running Quality Checks](#running-quality-checks)
-- [Deploying to Testnet](#deploying-to-testnet)
-- [CLI Examples](#cli-examples)
-- [Future Scope](#future-scope)
+- [Smart Contracts Reference](#smart-contracts-reference)
+- [Frontend architecture & PWA Strategy](#frontend-architecture--pwa-strategy)
+- [Real-time Indexer](#real-time-indexer)
+- [Project Setup Guide (Local Development)](#project-setup-guide-local-development)
+- [Visuals & Demo](#visuals--demo)
 
 ---
 
-## Live Demo
+## 🏗 Architecture Overview
 
-https://talambag.vercel.app/
-
----
-
-## Demo Video
-
-[![Watch the Talambag Demo](https://img.youtube.com/vi/Y03vvhb_GjQ/maxresdefault.jpg)](https://www.youtube.com/watch?v=Y03vvhb_GjQ)
+Talambag leverages a modern, decoupled architecture:
+1. **Smart Contracts (Soroban/Rust):** Enforces group/pool logic, handles contributions, manages authorization, and issues reward tokens via a two-contract architecture (Core + Rewards).
+2. **Real-time Indexer (Node.js/Prisma):** Subscribes to the Stellar RPC to ingest contract events into a PostgreSQL database, broadcasting them to the frontend via Server-Sent Events (SSE). 
+3. **Progressive Web App (Next.js/React):** A highly responsive mobile-first frontend running on Next.js 15.5 that utilizes custom Service Workers (SW), localStorage cache, and wallet state snapshots to provide robust offline reading capabilities.
 
 ---
 
-## UI Screenshots
+## ✨ Key Features
 
-### Wallet States
+### 1. Community Pooling (Core)
+- **Groups & Members:** Create and join distinct groups identified on-chain.
+- **Contribution Pools:** Group members can create time-boxed or goal-oriented pools.
+- **Deposits & Withdrawals:** Verifiable contributions recorded on-chain using Soroban smart contracts.
 
-Talambag — Wallet Connected
-![Talambag Wallet Connected](frontend/public/screenshots/dashboard-overview.png)
+### 2. Rewards System (Dual-Contract Design)
+- **Contribution Incentives:** The `talambag_rewards` contract is linked to the core contract. When a member contributes in the core contract, it natively communicates with the rewards contract to grant `PENDING` reward tokens based on the contribution value.
+- **Auto-Syncing:** If a group was created prior to the rewards contract being linked, the records are seamlessly auto-synced when the first post-link deposit is routed.
 
-Talambag — Wallet Disconnected
-![Talambag Wallet Disconnected](frontend/public/screenshots/wallet-disconnected.png)
+### 3. Real-Time Event Syncing
+- **Centralized Source of Truth:** Instead of relying on manual refresh buttons, the frontend connects to the **Indexer** over SSE (`/events/stream`). 
+- **Graceful Cache Invalidation:** The frontend listens to contract events (`deposit`, `withdraw`, `pool_created`, `member_added`) from the indexer and uses them purely as cache invalidation signals, prompting an immediate fallback to querying the on-chain single source of truth.
 
-### Wallet Options
+### 4. Progressive Web App (PWA) & Offline Mode
+- **No Third-Party PWA Libraries:** Fully custom-built PWA lifecycle using `public/sw.js` and App route manifest generation.
+- **Read-Only Offline Access:** Using our custom persistent caching abstraction (`browser-storage.ts`, `cache.ts`), cached read operations are surfaced to the user.
+- **Smart Wallet Persistence:** Snapshotting current connect wallets so the dashboard and profile screens load safely when offline. Actions requiring a signature (creating pools, depositing) are disabled intelligently alongside a dynamic connectivity banner.
 
-![Talambag Wallet Options](frontend/public/screenshots/wallets.png)
+---
 
-![Talambag Wallet Options (cont.)](frontend/public/screenshots/wallets(cont).png)
+## 🗂 Project Structure
 
-### Dashboard Overview
+```text
+Stellar-Project/
+├── contracts/                  # Soroban smart contracts (Rust workspace)
+│   ├── Cargo.toml
+│   └── src/
+│       ├── lib.rs              # Talambag core contract logic
+│       └── test.rs             # Cross-contract unit tests
+│   └── rewards/
+│       ├── Cargo.toml
+│       └── src/
+│           └── lib.rs          # Reward/governance token contract
+└── frontend/                   # Next.js 15 web application
+    ├── package.json
+    ├── next.config.ts
+    ├── tsconfig.json
+    └── src/
+        ├── app/
+        │   ├── layout.tsx              # Root layout with WalletProvider
+        │   ├── page.tsx                # Dashboard — lists all groups
+        │   ├── groups/
+        │   │   └── [groupId]/
+        │   │       ├── page.tsx        # Group detail — member & pool management
+        │   │       └── pools/
+        │   │           └── [poolId]/
+        │   │               └── page.tsx  # Pool detail — deposit, withdraw, events
+        │   └── api/
+        │       └── contract-events/
+        │           └── route.ts        # Server-side proxy to Stellar Expert events API
+        ├── components/
+        │   ├── navbar.tsx              # Top navigation bar
+        │   ├── layout-shell.tsx        # Wraps pages with WalletProvider + Navbar
+        │   ├── wallet-kit-button.tsx   # Connect/disconnect wallet button + dropdown
+        │   ├── wallet-status-notice.tsx # Wrong-network and wallet-error banners
+        │   ├── feedback-banner.tsx     # Transaction state feedback (signing → success)
+        │   ├── search-bar.tsx          # Reusable search input
+        │   ├── modal.tsx               # Generic modal shell
+        │   ├── create-group-modal.tsx  # Form: create a new group
+        │   ├── add-member-modal.tsx    # Form: add a wallet to a group
+        │   ├── create-pool-modal.tsx   # Form: create a pool inside a group
+        │   └── deposit-modal.tsx       # Form: deposit tokens into a pool
+        ├── contexts/
+        │   └── wallet-context.tsx      # React context providing wallet state globally
+        ├── hooks/
+        │   └── use-wallet-kit.ts       # Wallet Kit state machine + event subscription
+        └── lib/
+            ├── config.ts           # App-wide config from environment variables
+            ├── talambag-client.ts  # All Soroban RPC calls and signing logic
+          ├── rewards-client.ts   # Reward token reads and claim actions
+          ├── realtime-events.ts  # Indexer-backed event history + SSE helpers
+            ├── wallet-kit.ts       # Stellar Wallets Kit initialization and helpers
+            ├── types.ts            # Shared TypeScript types
+            ├── format.ts           # Amount formatting and address shortening
+            ├── validators.ts       # Stellar address and text validation
+            └── cache.ts            # 30-second TTL in-memory cache for RPC reads
+    └── indexer/                    # Realtime event ingestion service
+      ├── package.json
+      ├── tsconfig.json
+      ├── .env.example
+      └── src/
+        ├── server.ts           # HTTP API + SSE stream
+        ├── indexer.ts          # RPC polling loop
+        ├── normalize-event.ts  # Soroban event decoding
+        ├── db.ts               # Neon/Postgres persistence
+        └── config.ts           # Environment parsing
+```
 
-![Talambag Dashboard](frontend/public/screenshots/dashboard-overview.png)
+---
 
-### Mobile Responsive
+## 📜 Smart Contracts Reference
 
-![Talambag Mobile Dashboard](frontend/public/screenshots/mobile-dashboard.png)
+### Core Contract (`TalambagContract`)
+- **Groups:** Stores an atomic counter. Allows the creation of distinct group instances.
+- **Pools:** Bound to an individual group. Keeps track of the balance.
+- **Auth:** Standard `.require_auth()` logic bound to the Group Owner (for adding members) or Pool Organizer (for withdrawals).
+- **Integration:** Exposes `set_rewards_contract` for inter-contract linkages. 
 
-![Talambag Mobile Create Group](frontend/public/screenshots/mobile-create-new-group.png)
+### Rewards Contract (`RewardTokenContract`)
+- Maintains balances and token supply for local contributions (`DataKey::PendingReward` / `DataKey::GroupTotalContributed`).
+- Allows users to claim their generated pending tokens based on the internal parameters.
 
-![Talambag Mobile Groups](frontend/public/screenshots/mobile-groups.png)
+---
 
-![Talambag Mobile Pools](frontend/public/screenshots/mobile-pools.png)
+## 📡 Frontend Architecture & PWA Strategy
 
-![Talambag Mobile Deposit](frontend/public/screenshots/mobile-deposit.png)
+The web UI is geared around mobile environments. By eliminating reliance on generic `next-pwa` plugins, the configuration maintains full control over what is cached.
+- **Persistence Layer:** Contract read queries proxy through a cache layer. 
+- **Offline Recon:** `use-online-status.ts` intelligently flips the UI to read-only mode, showing a fallback status banner so users never hit a generic blank screen. Real-time streams are explicitly paused on disconnect and seamlessly resumed when returning online.
 
-### Group Page
+---
 
-![Group Page](frontend/public/screenshots/group-page.png)
+## ⚡️ Real-time Indexer
 
-### Create Group
+The indexer is a standalone Node.js daemon designed to sit between the stellar RPC and the frontend.
+- **Prisma & Postgres:** Uses Prisma schema and Postgres (`@prisma/adapter-pg` supported) to sink `getEvents` from the RPC node efficiently in bounded batch intervals.
+- **Streaming:** The `/events/stream` HTTP endpoint allows fine-grained, filtered subscription to particular contracts and topics, eliminating the need to poll the RPC from the frontend.
 
-![Create Group Form](frontend/public/screenshots/create-group.png)
+---
 
-### Add Member to Group
+## 🚀 Project Setup Guide (Local Development)
 
-![Add Member to Group Form](frontend/public/screenshots/add-member.png)
+### 1. Prerequisites
+- **Rust / WebAssembly target:** `rustup target add wasm32-unknown-unknown`
+- **Stellar CLI:** Used for Soroban builds and tests.
+- **Node.js 22+ & pnpm:** `npm install -g pnpm`
+- **Local Postgres:** E.g., `docker run --name talambag-db -e POSTGRES_PASSWORD=postgres -p 5432:5432 -d postgres`
+- **Stellar Quickstart Container** (for a local network)
 
-### Pool Page
+### 2. Smart Contracts
+```bash
+cd contracts
+stellar contract build
+# Runs tests across core and rewards module
+cargo test
+```
+*Note: Deploy both the core and rewards contracts using `stellar contract deploy` on your target local/testnet, then link them with the core contract's `set_rewards_contract` endpoint.*
 
-![Pool Page](frontend/public/screenshots/pool-page.png)
+### 3. Indexer Configuration
+```bash
+cd indexer
+pnpm install
+```
+Ensure your database is running and generate Prisma client files:
+```bash
+export INDEXER_DATABASE_URL="postgresql://postgres:postgres@localhost:5432/talambag"
+export INDEXER_STELLAR_RPC_URL="http://localhost:8000/rpc" # Assuming local quickstart
+pnpm run db:generate
+pnpm dev
+```
 
-### Pool Actions — Deposit
+### 4. Frontend Launch
+```bash
+cd frontend
+pnpm install
+# Set required env vars inside .env corresponding to your deployed contract IDs & Indexer URL
+pnpm dev
+```
+Navigate to `http://localhost:3000` to interact with the Next.js app!
 
-![Pool Deposit](frontend/public/screenshots/add-deposit.png)
+---
 
-### Pool Actions — Withdraw
+## 🎨 Visuals & Demo
 
-![Pool Withdrawal](frontend/public/screenshots/add-withdrawal.png)
+**Live Demo**: [https://talambag.vercel.app/](https://talambag.vercel.app/)
 
-### Transaction Feedback
+**Platform Functionality:**
+
+| Feature | Screenshot Preview |
+|---|---|
+| Dashboard Overview | ![Dashboard](frontend/public/screenshots/dashboard-overview.png) |
+| Offline / Wallet Disconnected | ![Disconnected](frontend/public/screenshots/wallet-disconnected.png) |
+| Mobile Create Group | ![Mobile Create](frontend/public/screenshots/mobile-create-new-group.png) |
+| Group Pool Layout | ![Pools Layout](frontend/public/screenshots/pool-page.png) |
+| Pool Deposits | ![Deposits](frontend/public/screenshots/add-deposit.png) |
+| Wallet Providers | ![Wallets](frontend/public/screenshots/wallets.png) |
+
 
 ![Transaction Feedback](frontend/public/screenshots/transaction-feedback.png)
 
@@ -185,77 +297,6 @@ Talambag gives the group a smart-contract-backed source of truth. Balances are h
 - Claim flow that verifies active Talambag membership before minting TLMBG to the connected wallet.
 - Realtime indexer support for both core and rewards contracts so frontend reads and event streams stay in sync with on-chain activity.
 
----
-
-## Project Structure
-
-```
-Stellar-Project/
-├── contracts/                  # Soroban smart contracts (Rust workspace)
-│   ├── Cargo.toml
-│   └── src/
-│       ├── lib.rs              # Talambag core contract logic
-│       └── test.rs             # Cross-contract unit tests
-│   └── rewards/
-│       ├── Cargo.toml
-│       └── src/
-│           └── lib.rs          # Reward/governance token contract
-└── frontend/                   # Next.js 15 web application
-    ├── package.json
-    ├── next.config.ts
-    ├── tsconfig.json
-    └── src/
-        ├── app/
-        │   ├── layout.tsx              # Root layout with WalletProvider
-        │   ├── page.tsx                # Dashboard — lists all groups
-        │   ├── groups/
-        │   │   └── [groupId]/
-        │   │       ├── page.tsx        # Group detail — member & pool management
-        │   │       └── pools/
-        │   │           └── [poolId]/
-        │   │               └── page.tsx  # Pool detail — deposit, withdraw, events
-        │   └── api/
-        │       └── contract-events/
-        │           └── route.ts        # Server-side proxy to Stellar Expert events API
-        ├── components/
-        │   ├── navbar.tsx              # Top navigation bar
-        │   ├── layout-shell.tsx        # Wraps pages with WalletProvider + Navbar
-        │   ├── wallet-kit-button.tsx   # Connect/disconnect wallet button + dropdown
-        │   ├── wallet-status-notice.tsx # Wrong-network and wallet-error banners
-        │   ├── feedback-banner.tsx     # Transaction state feedback (signing → success)
-        │   ├── search-bar.tsx          # Reusable search input
-        │   ├── modal.tsx               # Generic modal shell
-        │   ├── create-group-modal.tsx  # Form: create a new group
-        │   ├── add-member-modal.tsx    # Form: add a wallet to a group
-        │   ├── create-pool-modal.tsx   # Form: create a pool inside a group
-        │   └── deposit-modal.tsx       # Form: deposit tokens into a pool
-        ├── contexts/
-        │   └── wallet-context.tsx      # React context providing wallet state globally
-        ├── hooks/
-        │   └── use-wallet-kit.ts       # Wallet Kit state machine + event subscription
-        └── lib/
-            ├── config.ts           # App-wide config from environment variables
-            ├── talambag-client.ts  # All Soroban RPC calls and signing logic
-          ├── rewards-client.ts   # Reward token reads and claim actions
-          ├── realtime-events.ts  # Indexer-backed event history + SSE helpers
-            ├── wallet-kit.ts       # Stellar Wallets Kit initialization and helpers
-            ├── types.ts            # Shared TypeScript types
-            ├── format.ts           # Amount formatting and address shortening
-            ├── validators.ts       # Stellar address and text validation
-            └── cache.ts            # 30-second TTL in-memory cache for RPC reads
-    └── indexer/                    # Realtime event ingestion service
-      ├── package.json
-      ├── tsconfig.json
-      ├── .env.example
-      └── src/
-        ├── server.ts           # HTTP API + SSE stream
-        ├── indexer.ts          # RPC polling loop
-        ├── normalize-event.ts  # Soroban event decoding
-        ├── db.ts               # Neon/Postgres persistence
-        └── config.ts           # Environment parsing
-```
-
----
 
 ## Smart Contract Reference
 
