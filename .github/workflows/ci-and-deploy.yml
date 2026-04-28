@@ -184,7 +184,7 @@ jobs:
             --admin "$STELLAR_TESTNET_ADMIN_ADDRESS")
 
           REWARD_CONTRACT_ID=$(stellar contract deploy \
-            --wasm contracts/rewards/target/wasm32v1-none/release/talambag_rewards.wasm \
+            --wasm contracts/target/wasm32v1-none/release/talambag_rewards.wasm \
             --source "$STELLAR_TESTNET_SECRET_KEY" \
             --network testnet \
             -- \
