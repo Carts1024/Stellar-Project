@@ -44,7 +44,7 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 10.0.0
+          version: 10.33.2
 
       - name: Install Node.js
         uses: actions/setup-node@v4
@@ -80,7 +80,7 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 10.0.0
+          version: 10.33.2
 
       - name: Install Node.js
         uses: actions/setup-node@v4
@@ -131,6 +131,11 @@ jobs:
         with:
           workspaces: |
             contracts
+
+      - name: Install system dependencies for Stellar CLI
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libdbus-1-dev pkg-config
 
       - name: Install Stellar CLI
         run: cargo install stellar-cli --locked
