@@ -114,46 +114,59 @@ jobs:
       - contracts
       - frontend
       - indexer
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && secrets.STELLAR_TESTNET_SECRET_KEY != '' && secrets.STELLAR_TESTNET_ADMIN_ADDRESS != ''
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     env:
       STELLAR_TESTNET_ADMIN_ADDRESS: ${{ secrets.STELLAR_TESTNET_ADMIN_ADDRESS }}
       STELLAR_TESTNET_SECRET_KEY: ${{ secrets.STELLAR_TESTNET_SECRET_KEY }}
 
     steps:
+      - name: Check deployment secrets
+        id: secrets
+        run: |
+          if [[ -n "$STELLAR_TESTNET_SECRET_KEY" && -n "$STELLAR_TESTNET_ADMIN_ADDRESS" ]]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "Missing STELLAR_TESTNET_SECRET_KEY or STELLAR_TESTNET_ADMIN_ADDRESS; skipping deploy."
+          fi
+
       - name: Check out repository
+        if: steps.secrets.outputs.ready == 'true'
         uses: actions/checkout@v4
 
       - name: Install Rust toolchain
+        if: steps.secrets.outputs.ready == 'true'
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Cargo artifacts
+        if: steps.secrets.outputs.ready == 'true'
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
             contracts
 
       - name: Install system dependencies for Stellar CLI
+        if: steps.secrets.outputs.ready == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y libdbus-1-dev libudev-dev pkg-config
 
       - name: Install Stellar CLI
+        if: steps.secrets.outputs.ready == 'true'
         run: cargo install stellar-cli --locked
 
-      - name: Verify deployment secrets
-        run: |
-          test -n "$STELLAR_TESTNET_SECRET_KEY"
-          test -n "$STELLAR_TESTNET_ADMIN_ADDRESS"
-
       - name: Build Talambag core contract
+        if: steps.secrets.outputs.ready == 'true'
         working-directory: contracts
         run: stellar contract build
 
       - name: Build rewards contract
+        if: steps.secrets.outputs.ready == 'true'
         working-directory: contracts/rewards
         run: stellar contract build
 
       - name: Deploy and link contracts
+        if: steps.secrets.outputs.ready == 'true'
         id: deploy
         shell: bash
         run: |
@@ -205,12 +218,14 @@ jobs:
           EOF
 
       - name: Upload deployment artifact
+        if: steps.secrets.outputs.ready == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: talambag-testnet-contract-ids
           path: deployment.env
 
       - name: Summarize deployment
+        if: steps.secrets.outputs.ready == 'true'
         run: |
           {
             echo "## Testnet Deployment"
