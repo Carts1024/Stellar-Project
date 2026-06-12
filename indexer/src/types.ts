@@ -35,7 +35,7 @@ export type RpcEventRecord = {
   ledger: number;
   ledgerClosedAt: string;
   pagingToken?: string;
-  topic: string[];
+  topics: string[];
   txHash: string;
   type: string;
   value: string;

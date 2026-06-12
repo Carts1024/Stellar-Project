@@ -99,7 +99,7 @@ function toAmount(value: unknown) {
 }
 
 export function normalizeRpcEvent(event: RpcEventRecord): NormalizedContractEvent | null {
-  const topics = event.topic.map((segment) => decodeScVal(segment));
+  const topics = event.topics.map((segment) => decodeScVal(segment));
   const payload = decodeScVal(event.value);
   const eventType = String(topics[0] ?? "unknown");
   const source =
