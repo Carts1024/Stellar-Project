@@ -15,6 +15,10 @@ jobs:
   contracts:
     name: Contracts
     runs-on: ubuntu-latest
+    env:
+      CARGO_HTTP_MULTIPLEXING: "false"
+      CARGO_NET_RETRY: "10"
+      CARGO_TERM_COLOR: always
 
     steps:
       - name: Check out repository
@@ -29,9 +33,24 @@ jobs:
           workspaces: |
             contracts
 
+      - name: Fetch Soroban contract dependencies
+        working-directory: contracts
+        run: |
+          for attempt in 1 2 3; do
+            if cargo fetch --locked; then
+              exit 0
+            fi
+
+            if [[ "$attempt" == "3" ]]; then
+              exit 1
+            fi
+
+            sleep "$((attempt * 15))"
+          done
+
       - name: Run Soroban contract tests
         working-directory: contracts
-        run: cargo test --workspace
+        run: cargo test --workspace --locked
 
   frontend:
     name: Frontend
@@ -116,6 +135,9 @@ jobs:
       - indexer
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     env:
+      CARGO_HTTP_MULTIPLEXING: "false"
+      CARGO_NET_RETRY: "10"
+      CARGO_TERM_COLOR: always
       STELLAR_TESTNET_ADMIN_ADDRESS: ${{ secrets.STELLAR_TESTNET_ADMIN_ADDRESS }}
       STELLAR_TESTNET_SECRET_KEY: ${{ secrets.STELLAR_TESTNET_SECRET_KEY }}
 
