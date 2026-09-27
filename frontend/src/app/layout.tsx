@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { LayoutShell } from "@/components/layout-shell";
 import { pwaConfig } from "@/lib/pwa/constants";
+import { Analytics } from "@vercel/analytics/next";
 
 export const metadata: Metadata = {
   applicationName: pwaConfig.name,
@@ -61,6 +62,7 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <LayoutShell>{children}</LayoutShell>
+        <Analytics />
       </body>
     </html>
   );
