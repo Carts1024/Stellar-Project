@@ -8,6 +8,8 @@ import type { ContractEventFilters, JsonValue, NormalizedContractEvent } from ".
 
 const EVENTS_CURSOR_STATE_KEY = "events_cursor";
 const SERIALIZABLE_RETRY_LIMIT = 3;
+const TRANSACTION_MAX_WAIT_MS = 10_000;
+const TRANSACTION_TIMEOUT_MS = 15_000;
 
 const contractEventSelect = Prisma.validator<Prisma.ContractEventSelect>()({
   eventId: true,
@@ -71,6 +73,18 @@ function hasPrismaErrorCode(error: unknown, code: string) {
     error !== null &&
     "code" in error &&
     (error as { code?: unknown }).code === code
+  );
+}
+
+function isRetryableTransactionError(error: unknown) {
+  if (hasPrismaErrorCode(error, "P2034")) {
+    return true;
+  }
+
+  return (
+    hasPrismaErrorCode(error, "P2028") &&
+    error instanceof Error &&
+    error.message.toLowerCase().includes("unable to start a transaction in the given time")
   );
 }
 
@@ -154,21 +168,16 @@ export class PrismaEventStore implements EventStore {
 
   async storeEventBatch(batch: StoreEventBatchInput): Promise<StoreEventBatchResult> {
     const insertedEvents = await this.runSerializableTransaction(async (transactionClient) => {
-      const persistedEvents: NormalizedContractEvent[] = [];
-
-      for (const event of batch.events) {
-        try {
-          await transactionClient.contractEvent.create({
-            data: toCreateInput(event),
-            select: { eventId: true },
-          });
-          persistedEvents.push(event);
-        } catch (error) {
-          if (!hasPrismaErrorCode(error, "P2002")) {
-            throw error;
-          }
-        }
-      }
+      const insertedEventIds =
+        batch.events.length === 0
+          ? []
+          : await transactionClient.contractEvent.createManyAndReturn({
+              data: batch.events.map(toCreateInput),
+              skipDuplicates: true,
+              select: { eventId: true },
+            });
+      const insertedEventIdSet = new Set(insertedEventIds.map(({ eventId }) => eventId));
+      const persistedEvents = batch.events.filter((event) => insertedEventIdSet.has(event.eventId));
 
       if (batch.cursor !== null) {
         await transactionClient.indexerState.upsert({
@@ -220,14 +229,18 @@ export class PrismaEventStore implements EventStore {
     while (attempt < SERIALIZABLE_RETRY_LIMIT) {
       try {
         return await this.client.$transaction(operation, {
+          maxWait: TRANSACTION_MAX_WAIT_MS,
+          timeout: TRANSACTION_TIMEOUT_MS,
           isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
         });
       } catch (error) {
         attempt += 1;
 
-        if (!hasPrismaErrorCode(error, "P2034") || attempt >= SERIALIZABLE_RETRY_LIMIT) {
+        if (!isRetryableTransactionError(error) || attempt >= SERIALIZABLE_RETRY_LIMIT) {
           throw error;
         }
+
+        await new Promise((resolve) => setTimeout(resolve, 150 * 2 ** (attempt - 1)));
       }
     }
 

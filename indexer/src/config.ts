@@ -52,8 +52,8 @@ if (parsedEnvironment.INDEXER_VELO_GAS_ENABLED) {
     throw new Error("INDEXER_GAS_INTERNAL_TOKEN must contain at least 32 characters when Gas Station is enabled.");
   }
 
-  if (!parsedEnvironment.VELO_GAS_API_KEY || !parsedEnvironment.VELO_BASE_URL) {
-    throw new Error("Configure VELO_GAS_API_KEY and VELO_BASE_URL when INDEXER_VELO_GAS_ENABLED=true.");
+  if (!parsedEnvironment.VELO_GAS_API_KEY) {
+    throw new Error("Configure VELO_GAS_API_KEY when INDEXER_VELO_GAS_ENABLED=true.");
   }
 }
 

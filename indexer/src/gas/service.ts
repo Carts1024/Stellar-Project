@@ -45,11 +45,16 @@ export function createGasClient(): Velo {
   const apiKey = process.env.VELO_GAS_API_KEY?.trim();
   const baseUrl = process.env.VELO_BASE_URL?.trim();
 
-  if (!apiKey || !baseUrl) {
-    throw new Error("Configure VELO_GAS_API_KEY and VELO_BASE_URL on the server.");
+  if (!apiKey) {
+    throw new Error("Configure VELO_GAS_API_KEY on the server.");
   }
 
-  return new Velo({ apiKey, baseUrl, timeoutMs: GAS_TIMEOUT_MS });
+  return new Velo({
+    apiKey,
+    environment: "testnet",
+    ...(baseUrl ? { baseUrl } : {}),
+    timeoutMs: GAS_TIMEOUT_MS,
+  });
 }
 
 function defaultVeloFactory() {

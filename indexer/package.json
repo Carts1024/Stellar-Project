@@ -19,7 +19,7 @@
     "test": "tsx --test src/gas/*.test.ts ../frontend/src/lib/server/*.test.ts"
   },
   "dependencies": {
-    "@carts1024/velo-sdk": "0.1.0-alpha.3",
+    "@carts1024/velo-sdk": "0.1.0-alpha.4",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "@stellar/stellar-sdk": "^14.6.1",

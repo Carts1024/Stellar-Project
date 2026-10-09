@@ -693,7 +693,7 @@ Before enabling the feature, complete the Velo-side checks:
 
 | Owner | Required action |
 |---|---|
-| Talambag app operator | Obtain a Gas-scoped project API key and the exact deployment URL paired with that Testnet Gas policy. Store them only in indexer server environment variables. |
+| Talambag app operator | Obtain a Gas Station · Testnet scoped project API key (`tg_test_<32 hex characters>`). Store it only in indexer server environment variables. If the policy uses a separate Velo deployment, obtain its exact HTTPS URL from the Velo project owner and set `VELO_BASE_URL`. |
 | Velo project owner | Enable the Testnet Gas policy; set a positive daily cap and positive hourly wallet quota; allowlist the configured Talambag core and rewards contracts plus every group asset contract used by the app (the configured XLM Stellar Asset Contract is one example); confirm the active public relayer address in project metadata. |
 | Velo deployment operator | Confirm the relayer is active and funded with Testnet XLM, and verify its configured private signer matches the public relayer address. Keep signer custody in the Velo deployment; never paste a relayer secret into the dashboard or this application. |
 
@@ -707,8 +707,8 @@ Configure the application after those checks:
 | INDEXER_GAS_INTERNAL_TOKEN | Vercel and indexer service | The same randomly generated value of at least 32 characters on both servers. |
 | TALAMBAG_GAS_SESSION_SECRET | Vercel only | A separate randomly generated value of at least 32 characters for signing the HTTP-only wallet session. |
 | INDEXER_VELO_GAS_ENABLED | Indexer service | true after configuration is complete. |
-| VELO_GAS_API_KEY | Indexer service only | <GAS_SCOPED_PROJECT_API_KEY>. Keep it server-only. |
-| VELO_BASE_URL | Indexer service only | <EXACT_VELO_TESTNET_DEPLOYMENT_URL> from the Velo project owner. The server requires HTTPS. |
+| VELO_GAS_API_KEY | Indexer service only | A Gas Station · Testnet scoped key (`tg_test_<32 hex characters>`). Keep it server-only. |
+| VELO_BASE_URL | Indexer service only | Optional HTTPS override for a separate Velo deployment. Defaults to the SDK Testnet origin, `https://www.velo-build.dev`. |
 
 Set these values using the Vercel and Railway server-side environment settings. Use the placeholders in frontend/.env.example and indexer/.env.example; do not commit actual values. Apply the new recovery-table migration from indexer/ with pnpm db:migrate:deploy before enabling the feature.
 
@@ -730,8 +730,8 @@ The automated Gas tests use deterministic mocked Velo HTTP responses and generat
 | `INDEXER_START_LEDGER` | No | Optional ledger sequence to use for initial backfill. |
 | INDEXER_VELO_GAS_ENABLED | No | Set to true after Velo policy and server configuration are verified. |
 | INDEXER_GAS_INTERNAL_TOKEN | For Gas | Shared server-to-server token, also configured on the Next.js server. |
-| VELO_GAS_API_KEY | For Gas | Gas-scoped Velo project key. Keep it on the indexer server. |
-| VELO_BASE_URL | For Gas | Exact HTTPS deployment URL paired with the Testnet Gas policy. |
+| VELO_GAS_API_KEY | For Gas | Gas Station · Testnet scoped Velo project key (`tg_test_<32 hex characters>`). Keep it on the indexer server. |
+| VELO_BASE_URL | No | Optional HTTPS override for a separate Velo deployment; defaults to `https://www.velo-build.dev` through the Velo SDK. |
 
 ### Railway (Indexer)
 
