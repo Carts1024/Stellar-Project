@@ -4,7 +4,8 @@ import { useId, useState } from "react";
 import { Modal } from "@/components/modal";
 import { FeedbackBanner } from "@/components/feedback-banner";
 import { useWallet } from "@/contexts/wallet-context";
-import { TxError, createPool } from "@/lib/talambag-client";
+import { appConfig } from "@/lib/config";
+import { getTransactionFailureFeedback, createPool } from "@/lib/talambag-client";
 import { requireText } from "@/lib/validators";
 import type { TxFeedback } from "@/lib/types";
 
@@ -50,8 +51,10 @@ export function CreatePoolModal({ open, onClose, onCreated, groupId, onSuccessFe
         () =>
           setFeedback({
             state: "submitting",
-            title: "Transaction broadcast",
-            detail: "Waiting for on-chain confirmation...",
+            title: appConfig.gasEnabled ? "Sending to Gas Station" : "Transaction broadcast",
+            detail: appConfig.gasEnabled
+              ? "The signed Testnet transaction is being handed to the relayer."
+              : "Waiting for on-chain confirmation...",
           }),
       );
 
@@ -71,12 +74,15 @@ export function CreatePoolModal({ open, onClose, onCreated, groupId, onSuccessFe
       onCreated(result.poolId ?? null);
       handleClose();
     } catch (error) {
-      const isRejected = error instanceof TxError && error.kind === "rejected";
-      setFeedback({
-        state: isRejected ? "rejected" : "error",
-        title: isRejected ? "Pool creation canceled" : "Pool creation failed",
-        detail: error instanceof Error ? error.message : "The pool could not be created.",
-      });
+      setFeedback(
+        getTransactionFailureFeedback(error, {
+          cancelledTitle: "Pool creation canceled",
+          failedTitle: "Pool creation failed",
+          deniedTitle: "Gas sponsorship unavailable",
+          pendingTitle: "Pool creation pending",
+          fallbackMessage: "The pool could not be created.",
+        }),
+      );
     } finally {
       setIsSubmitting(false);
     }

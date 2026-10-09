@@ -5,7 +5,7 @@ import { Modal } from "@/components/modal";
 import { FeedbackBanner } from "@/components/feedback-banner";
 import { useWallet } from "@/contexts/wallet-context";
 import { appConfig } from "@/lib/config";
-import { TxError, createGroup } from "@/lib/talambag-client";
+import { getTransactionFailureFeedback, createGroup } from "@/lib/talambag-client";
 import { isValidStellarAddress, requireText } from "@/lib/validators";
 import type { TxFeedback } from "@/lib/types";
 
@@ -53,8 +53,10 @@ export function CreateGroupModal({ open, onClose, onCreated, onSuccessFeedback }
         () =>
           setFeedback({
             state: "submitting",
-            title: "Transaction broadcast",
-            detail: "Waiting for on-chain confirmation...",
+            title: appConfig.gasEnabled ? "Sending to Gas Station" : "Transaction broadcast",
+            detail: appConfig.gasEnabled
+              ? "The signed Testnet transaction is being handed to the relayer."
+              : "Waiting for on-chain confirmation...",
           }),
       );
 
@@ -74,12 +76,15 @@ export function CreateGroupModal({ open, onClose, onCreated, onSuccessFeedback }
       onCreated();
       handleClose();
     } catch (error) {
-      const isRejected = error instanceof TxError && error.kind === "rejected";
-      setFeedback({
-        state: isRejected ? "rejected" : "error",
-        title: isRejected ? "Group creation canceled" : "Group creation failed",
-        detail: error instanceof Error ? error.message : "The group could not be created.",
-      });
+      setFeedback(
+        getTransactionFailureFeedback(error, {
+          cancelledTitle: "Group creation canceled",
+          failedTitle: "Group creation failed",
+          deniedTitle: "Gas sponsorship unavailable",
+          pendingTitle: "Group creation pending",
+          fallbackMessage: "The group could not be created.",
+        }),
+      );
     } finally {
       setIsSubmitting(false);
     }

@@ -47,6 +47,7 @@ export interface DatabaseLifecycle {
 
 export interface EventIngestionStore {
   getStoredCursor(): Promise<string | null>;
+  clearStoredCursor(): Promise<void>;
   storeEventBatch(batch: StoreEventBatchInput): Promise<StoreEventBatchResult>;
 }
 
@@ -143,6 +144,12 @@ export class PrismaEventStore implements EventStore {
     });
 
     return state?.stateValue ?? null;
+  }
+
+  async clearStoredCursor() {
+    await this.client.indexerState.deleteMany({
+      where: { stateKey: EVENTS_CURSOR_STATE_KEY },
+    });
   }
 
   async storeEventBatch(batch: StoreEventBatchInput): Promise<StoreEventBatchResult> {

@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@carts1024/velo-sdk':
+        specifier: 0.1.0-alpha.3
+        version: 0.1.0-alpha.3
       '@prisma/adapter-pg':
         specifier: ^7.8.0
         version: 7.8.0
@@ -47,6 +50,10 @@ importers:
         version: 5.9.3
 
 packages:
+
+  '@carts1024/velo-sdk@0.1.0-alpha.3':
+    resolution: {integrity: sha512-cZ44ORHFCOzBpBBar7Kq58DQqMPjUbmVVHrBQk86/rENK8/NboWpAWLNk16DrcRdzdVGRGAp0BBWm/ttSNyopw==}
+    engines: {node: '>=18'}
 
   '@electric-sql/pglite-socket@0.1.1':
     resolution: {integrity: sha512-p2hoXw3Z3LQHwTeikdZNsFBOvXGqKY2hk51BBw+8NKND8eoH+8LFOtW9Z8CQKmTJ2qqGYu82ipqiyFZOTTXNfw==}
@@ -1174,6 +1181,8 @@ packages:
     resolution: {integrity: sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg==}
 
 snapshots:
+
+  '@carts1024/velo-sdk@0.1.0-alpha.3': {}
 
   '@electric-sql/pglite-socket@0.1.1(@electric-sql/pglite@0.4.1)':
     dependencies:

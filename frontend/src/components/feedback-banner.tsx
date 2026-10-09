@@ -24,6 +24,9 @@ export function FeedbackBanner({ feedback }: FeedbackBannerProps) {
       <div>
         <h2>{feedback.title}</h2>
         {feedback.detail ? <p>{feedback.detail}</p> : null}
+        {feedback.operationId ? (
+          <p className="feedback-operation-id">Recovery ID: {feedback.operationId}</p>
+        ) : null}
       </div>
       {feedback.hash ? (
         <a

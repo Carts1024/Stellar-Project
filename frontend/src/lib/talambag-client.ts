@@ -4,6 +4,7 @@ import {
   Address,
   BASE_FEE,
   Operation,
+  Networks,
   TransactionBuilder,
   nativeToScVal,
   rpc,
@@ -12,8 +13,9 @@ import {
 } from "@stellar/stellar-sdk";
 import { appConfig, getExpectedNetworkPassphrase, hasRequiredConfig } from "@/lib/config";
 import { signWithActiveWallet } from "@/lib/wallet-kit";
+import { GasClientError, submitGasOperation, type GasOperationResult } from "@/lib/gas-client";
 import { getCached, invalidateCached, setCached } from "@/lib/cache";
-import type { ContractSnapshot, GroupSummary, PoolEvent, PoolSummary } from "@/lib/types";
+import type { ContractSnapshot, GroupSummary, PoolEvent, PoolSummary, TxFeedback } from "@/lib/types";
 import type { WalletErrorKind } from "@/lib/types";
 
 /**
@@ -23,12 +25,151 @@ import type { WalletErrorKind } from "@/lib/types";
  */
 export class TxError extends Error {
   readonly kind: WalletErrorKind;
+  readonly outcome: "failed" | "denied" | "pending";
 
-  constructor(message: string, kind: WalletErrorKind = "other") {
+  constructor(
+    message: string,
+    kind: WalletErrorKind = "other",
+    outcome: "failed" | "denied" | "pending" = "failed",
+  ) {
     super(message);
     this.name = "TxError";
     this.kind = kind;
+    this.outcome = outcome;
   }
+}
+
+export class TxPendingError extends TxError {
+  readonly operationId: string;
+  readonly transactionHash?: string;
+  readonly outerTransactionHash?: string | null;
+
+  constructor(operationId: string, message: string, result?: GasOperationResult) {
+    super(message, "other", "pending");
+    this.name = "TxPendingError";
+    this.operationId = operationId;
+    this.transactionHash = result?.transactionHash;
+    this.outerTransactionHash = result?.outerTransactionHash;
+  }
+}
+
+export function getTransactionFailureFeedback(
+  error: unknown,
+  labels: Readonly<{
+    cancelledTitle: string;
+    failedTitle: string;
+    deniedTitle: string;
+    pendingTitle: string;
+    fallbackMessage: string;
+  }>,
+): TxFeedback {
+  if (error instanceof TxPendingError) {
+    return {
+      state: "pending",
+      title: labels.pendingTitle,
+      detail: error.message,
+      operationId: error.operationId,
+      hash: error.outerTransactionHash ?? error.transactionHash,
+    };
+  }
+
+  if (error instanceof TxError && error.outcome === "denied") {
+    return {
+      state: "error",
+      title: labels.deniedTitle,
+      detail: error.message,
+    };
+  }
+
+  if (error instanceof TxError && error.kind === "rejected") {
+    return {
+      state: "rejected",
+      title: labels.cancelledTitle,
+      detail: error.message,
+    };
+  }
+
+  return {
+    state: "error",
+    title: labels.failedTitle,
+    detail: error instanceof Error ? error.message : labels.fallbackMessage,
+  };
+}
+
+export async function submitSignedGasTransaction<T>(
+  server: ReturnType<typeof getServer>,
+  signedTransactionXdr: string,
+  sourceAddress: string,
+  transformReturn?: (value: unknown) => T,
+) {
+  if (getExpectedNetworkPassphrase() !== Networks.TESTNET) {
+    throw new TxError("Velo Gas Station sponsorship is available for Stellar Testnet only.");
+  }
+
+  let gasResult: GasOperationResult;
+  try {
+    gasResult = await submitGasOperation(signedTransactionXdr, sourceAddress);
+  } catch (error) {
+    if (error instanceof GasClientError && error.unresolved && error.operationId) {
+      throw new TxPendingError(error.operationId, error.message);
+    }
+    throw error;
+  }
+
+  if (gasResult.status === "denied") {
+    throw new TxError(
+      "Gas sponsorship was denied" + (gasResult.errorCode ? " (" + gasResult.errorCode + ")." : "."),
+      "other",
+      "denied",
+    );
+  }
+
+  if (
+    gasResult.status === "claimed" ||
+    gasResult.status === "submission_unknown" ||
+    gasResult.status === "submitted" ||
+    gasResult.status === "pending"
+  ) {
+    throw new TxPendingError(
+      gasResult.operationId,
+      "The signed transaction is still being reconciled. Check its status before starting another operation.",
+      gasResult,
+    );
+  }
+
+  if (gasResult.status === "failed" || gasResult.status === "cancelled") {
+    throw new TxError(
+      gasResult.status === "cancelled"
+        ? "The relayer cancelled this transaction."
+        : "The transaction failed on Stellar Testnet.",
+    );
+  }
+
+  const hash = gasResult.outerTransactionHash ?? gasResult.transactionHash;
+  let result: T | undefined;
+  try {
+    const finalResponse = await server.pollTransaction(hash, {
+      attempts: 4,
+      sleepStrategy: () => 250,
+    });
+    if (
+      transformReturn &&
+      finalResponse.status === rpc.Api.GetTransactionStatus.SUCCESS &&
+      finalResponse.returnValue
+    ) {
+      result = transformReturn(scValToNative(finalResponse.returnValue));
+    }
+  } catch {
+    // The Gas result is authoritative; RPC result decoding only supplies optional contract return data.
+  }
+
+  return {
+    hash,
+    transactionHash: gasResult.transactionHash,
+    outerTransactionHash: gasResult.outerTransactionHash,
+    actualFeeStroops: gasResult.actualFeeStroops,
+    result,
+  };
 }
 
 type ContractArg = {
@@ -214,11 +355,15 @@ async function signAndSubmit<T>(
     throw new TxError(normalizeError(error), kind);
   }
 
+  onSubmitting?.();
+  if (appConfig.gasEnabled) {
+    return submitSignedGasTransaction(server, signedXdr, sourceAddress, transformReturn);
+  }
+
   const signedTransaction = TransactionBuilder.fromXDR(
     signedXdr,
     getExpectedNetworkPassphrase(),
   );
-  onSubmitting?.();
   const sendResponse = await server.sendTransaction(signedTransaction);
 
   if (sendResponse.status !== "PENDING") {

@@ -7,7 +7,7 @@ import { useWallet } from "@/contexts/wallet-context";
 import { appConfig } from "@/lib/config";
 import { parseAmountToInt } from "@/lib/format";
 import { invalidateRewardSnapshotCaches } from "@/lib/rewards-client";
-import { TxError, depositToPool } from "@/lib/talambag-client";
+import { getTransactionFailureFeedback, depositToPool } from "@/lib/talambag-client";
 import type { TxFeedback } from "@/lib/types";
 
 type Props = {
@@ -62,8 +62,10 @@ export function DepositModal({
         () =>
           setFeedback({
             state: "submitting",
-            title: "Transaction broadcast",
-            detail: "Waiting for on-chain confirmation...",
+            title: appConfig.gasEnabled ? "Sending to Gas Station" : "Transaction broadcast",
+            detail: appConfig.gasEnabled
+              ? "The signed Testnet transaction is being handed to the relayer."
+              : "Waiting for on-chain confirmation...",
           }),
       );
 
@@ -82,12 +84,15 @@ export function DepositModal({
       onDeposited();
       handleClose();
     } catch (error) {
-      const isRejected = error instanceof TxError && error.kind === "rejected";
-      setFeedback({
-        state: isRejected ? "rejected" : "error",
-        title: isRejected ? "Contribution canceled" : "Contribution failed",
-        detail: error instanceof Error ? error.message : "The deposit transaction failed.",
-      });
+      setFeedback(
+        getTransactionFailureFeedback(error, {
+          cancelledTitle: "Contribution canceled",
+          failedTitle: "Contribution failed",
+          deniedTitle: "Gas sponsorship unavailable",
+          pendingTitle: "Contribution pending",
+          fallbackMessage: "The deposit transaction failed.",
+        }),
+      );
     } finally {
       setIsSubmitting(false);
     }

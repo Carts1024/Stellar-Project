@@ -4,7 +4,8 @@ import { useId, useState } from "react";
 import { Modal } from "@/components/modal";
 import { FeedbackBanner } from "@/components/feedback-banner";
 import { useWallet } from "@/contexts/wallet-context";
-import { TxError, addGroupMember } from "@/lib/talambag-client";
+import { appConfig } from "@/lib/config";
+import { getTransactionFailureFeedback, addGroupMember } from "@/lib/talambag-client";
 import { isValidStellarAddress } from "@/lib/validators";
 import type { TxFeedback } from "@/lib/types";
 
@@ -51,8 +52,10 @@ export function AddMemberModal({ open, onClose, onAdded, groupId, onSuccessFeedb
         () =>
           setFeedback({
             state: "submitting",
-            title: "Transaction broadcast",
-            detail: "Waiting for on-chain confirmation...",
+            title: appConfig.gasEnabled ? "Sending to Gas Station" : "Transaction broadcast",
+            detail: appConfig.gasEnabled
+              ? "The signed Testnet transaction is being handed to the relayer."
+              : "Waiting for on-chain confirmation...",
           }),
       );
       const successFeedback: TxFeedback = {
@@ -67,12 +70,15 @@ export function AddMemberModal({ open, onClose, onAdded, groupId, onSuccessFeedb
       onAdded();
       handleClose();
     } catch (error) {
-      const isRejected = error instanceof TxError && error.kind === "rejected";
-      setFeedback({
-        state: isRejected ? "rejected" : "error",
-        title: isRejected ? "Member addition canceled" : "Adding the member failed",
-        detail: error instanceof Error ? error.message : "The member could not be added.",
-      });
+      setFeedback(
+        getTransactionFailureFeedback(error, {
+          cancelledTitle: "Member addition canceled",
+          failedTitle: "Adding the member failed",
+          deniedTitle: "Gas sponsorship unavailable",
+          pendingTitle: "Member addition pending",
+          fallbackMessage: "The member could not be added.",
+        }),
+      );
     } finally {
       setIsSubmitting(false);
     }

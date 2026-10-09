@@ -22,6 +22,7 @@ export const appConfig = {
     "https://stellar.expert/explorer/testnet",
   readAddress: process.env.NEXT_PUBLIC_STELLAR_READ_ADDRESS ?? "",
   indexerUrl: process.env.NEXT_PUBLIC_TALAMBAG_INDEXER_URL ?? "",
+  gasEnabled: process.env.NEXT_PUBLIC_TALAMBAG_GAS_ENABLED === "true",
 };
 
 export const networkPassphraseByName: Record<string, string> = {

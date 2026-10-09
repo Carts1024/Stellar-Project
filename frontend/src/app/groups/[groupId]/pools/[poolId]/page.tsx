@@ -24,8 +24,8 @@ import {
 } from "@/lib/rewards-client";
 import {
   getContractSnapshot,
+  getTransactionFailureFeedback,
   withdrawFromPool,
-  TxError,
 } from "@/lib/talambag-client";
 import { isValidStellarAddress, parsePositiveIntegerParam } from "@/lib/validators";
 import {
@@ -214,8 +214,10 @@ export default function PoolPage() {
         () =>
           setFeedback({
             state: "submitting",
-            title: "Transaction broadcast",
-            detail: "Waiting for on-chain confirmation...",
+            title: appConfig.gasEnabled ? "Sending to Gas Station" : "Transaction broadcast",
+            detail: appConfig.gasEnabled
+              ? "The signed Testnet transaction is being handed to the relayer."
+              : "Waiting for on-chain confirmation...",
           }),
       );
 
@@ -230,12 +232,15 @@ export default function PoolPage() {
       setWithdrawRecipient("");
       void loadPool({ showEventsLoading: false, showLoading: false });
     } catch (error) {
-      const isRejected = error instanceof TxError && error.kind === "rejected";
-      setFeedback({
-        state: isRejected ? "rejected" : "error",
-        title: isRejected ? "Withdrawal canceled" : "Withdrawal failed",
-        detail: error instanceof Error ? error.message : "The withdrawal could not be submitted.",
-      });
+      setFeedback(
+        getTransactionFailureFeedback(error, {
+          cancelledTitle: "Withdrawal canceled",
+          failedTitle: "Withdrawal failed",
+          deniedTitle: "Gas sponsorship unavailable",
+          pendingTitle: "Withdrawal pending",
+          fallbackMessage: "The withdrawal could not be submitted.",
+        }),
+      );
     } finally {
       setIsWithdrawing(false);
     }
@@ -255,8 +260,10 @@ export default function PoolPage() {
       const result = await claimGroupRewards(wallet.address, groupId, () =>
         setFeedback({
           state: "submitting",
-          title: "Claim submitted",
-          detail: "Waiting for the rewards contract to mint your tokens on-chain...",
+          title: appConfig.gasEnabled ? "Sending to Gas Station" : "Claim submitted",
+          detail: appConfig.gasEnabled
+            ? "The signed Testnet transaction is being handed to the relayer."
+            : "Waiting for the rewards contract to mint your tokens on-chain...",
         }),
       );
 
@@ -269,12 +276,15 @@ export default function PoolPage() {
 
       void loadPool({ showEventsLoading: false, showLoading: false });
     } catch (error) {
-      const isRejected = error instanceof TxError && error.kind === "rejected";
-      setFeedback({
-        state: isRejected ? "rejected" : "error",
-        title: isRejected ? "Claim canceled" : "Claim failed",
-        detail: error instanceof Error ? error.message : "The rewards claim could not be submitted.",
-      });
+      setFeedback(
+        getTransactionFailureFeedback(error, {
+          cancelledTitle: "Claim canceled",
+          failedTitle: "Claim failed",
+          deniedTitle: "Gas sponsorship unavailable",
+          pendingTitle: "Rewards claim pending",
+          fallbackMessage: "The rewards claim could not be submitted.",
+        }),
+      );
     } finally {
       setIsClaimingRewards(false);
     }

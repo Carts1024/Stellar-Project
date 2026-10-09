@@ -15,9 +15,11 @@
     "db:migrate:dev": "prisma migrate dev",
     "db:validate": "prisma validate",
     "start": "node dist/server.js",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "tsx --test src/gas/*.test.ts ../frontend/src/lib/server/*.test.ts"
   },
   "dependencies": {
+    "@carts1024/velo-sdk": "0.1.0-alpha.3",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "@stellar/stellar-sdk": "^14.6.1",

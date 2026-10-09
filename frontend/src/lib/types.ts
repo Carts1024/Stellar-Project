@@ -2,7 +2,7 @@ export type ContractStatus = "idle" | "loading" | "ready" | "error";
 export type WalletStatus = "disconnected" | "connecting" | "connected" | "unsupported";
 
 /** "rejected" = user explicitly canceled the wallet prompt (not an error). */
-export type TxState = "idle" | "signing" | "submitting" | "success" | "rejected" | "error";
+export type TxState = "idle" | "signing" | "submitting" | "pending" | "success" | "rejected" | "error";
 
 /**
  * Classifies a wallet or contract error into one of three required categories
@@ -15,6 +15,7 @@ export type TxFeedback = {
   title: string;
   detail?: string;
   hash?: string;
+  operationId?: string;
 };
 
 export type GroupSummary = {

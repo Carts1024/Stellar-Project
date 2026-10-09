@@ -6,6 +6,7 @@ import { PwaBootstrap } from "@/components/pwa-bootstrap";
 import { WalletProvider } from "@/contexts/wallet-context";
 import { Navbar } from "@/components/navbar";
 import { WalletStatusNotice } from "@/components/wallet-status-notice";
+import { GasRecoveryNotice } from "@/components/gas-recovery-notice";
 
 export function LayoutShell({ children }: { children: ReactNode }) {
   return (
@@ -18,6 +19,7 @@ export function LayoutShell({ children }: { children: ReactNode }) {
         <div className="global-notice-stack">
           <ConnectivityBanner />
           <WalletStatusNotice />
+          <GasRecoveryNotice />
         </div>
         {children}
       </main>

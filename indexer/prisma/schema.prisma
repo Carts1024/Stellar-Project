@@ -40,3 +40,21 @@ model ContractEvent {
   @@index([ledger(sort: Desc), eventId(sort: Desc)], map: "contract_events_ledger_idx")
   @@map("contract_events")
 }
+model GasOperation {
+  operationId            String   @id @map("operation_id") @db.Uuid
+  walletAddress          String   @map("wallet_address") @db.Text
+  transactionHash        String   @map("transaction_hash") @db.Text
+  requestId              String?  @map("request_id") @db.Text
+  status                 String   @db.VarChar(32)
+  outerTransactionHash   String?  @map("outer_transaction_hash") @db.Text
+  reservedStroops        String?  @map("reserved_stroops") @db.Text
+  actualFeeStroops       String?  @map("actual_fee_stroops") @db.Text
+  expiresAt              DateTime? @map("expires_at") @db.Timestamptz(6)
+  reconciliationRequired Boolean  @default(false) @map("reconciliation_required")
+  errorCode              String?  @map("error_code") @db.VarChar(80)
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([walletAddress, updatedAt(sort: Desc)], map: "gas_operations_wallet_updated_idx")
+  @@map("gas_operations")
+}

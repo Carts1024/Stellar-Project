@@ -292,19 +292,32 @@ export class TalambagIndexer {
           cursor = nextCursor ?? cursor;
           startLedger = null;
         } catch (error) {
-          const minimumAvailableLedger = cursor ? null : getMinimumAvailableLedger(error);
+          const minimumAvailableLedger = getMinimumAvailableLedger(error);
 
           if (
             minimumAvailableLedger === null ||
-            (startLedger !== null && minimumAvailableLedger <= startLedger)
+            (!cursor && startLedger !== null && minimumAvailableLedger <= startLedger)
           ) {
             throw error;
           }
 
-          console.warn("Configured start ledger is outside the RPC retention range; retrying from the earliest available ledger.", {
-            configuredStartLedger: startLedger,
-            minimumAvailableLedger,
-          });
+          if (cursor) {
+            await this.eventStore.clearStoredCursor();
+            console.warn(
+              "Stored RPC cursor is outside the RPC retention range; resuming from the earliest available ledger.",
+              { minimumAvailableLedger },
+            );
+            cursor = null;
+          } else {
+            console.warn(
+              "Configured start ledger is outside the RPC retention range; retrying from the earliest available ledger.",
+              {
+                configuredStartLedger: startLedger,
+                minimumAvailableLedger,
+              },
+            );
+          }
+
           startLedger = minimumAvailableLedger;
           continue;
         }

@@ -274,7 +274,8 @@ a {
 }
 
 .feedback-card.signing,
-.feedback-card.submitting {
+.feedback-card.submitting,
+.feedback-card.pending {
   border-color: rgba(209, 154, 42, 0.3);
 }
 
@@ -299,6 +300,35 @@ a {
 .global-connectivity-notice,
 .global-wallet-notice {
   margin-bottom: 0;
+}
+
+.gas-recovery-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.gas-recovery-card h2 {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+}
+
+.gas-recovery-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.gas-recovery-card .gas-recovery-item {
+  margin-top: 6px;
+  font-size: 0.9rem;
+}
+
+.feedback-operation-id {
+  margin-top: 8px !important;
+  font-size: 0.88rem;
 }
 
 .card-head h2,

@@ -11,7 +11,7 @@ import {
 import { getCached, invalidateCached, setCached } from "@/lib/cache";
 import { appConfig, getExpectedNetworkPassphrase, hasRewardsConfig } from "@/lib/config";
 import { signWithActiveWallet } from "@/lib/wallet-kit";
-import { TxError, classifyError } from "@/lib/talambag-client";
+import { TxError, classifyError, submitSignedGasTransaction } from "@/lib/talambag-client";
 import type { RewardSnapshot, RewardTokenMetadata, WalletErrorKind } from "@/lib/types";
 
 type ContractArg = {
@@ -159,11 +159,15 @@ async function signAndSubmit<T>(
     throw new TxError(normalizeRewardsError(error), kind);
   }
 
+  onSubmitting?.();
+  if (appConfig.gasEnabled) {
+    return submitSignedGasTransaction(server, signedXdr, sourceAddress, transformReturn);
+  }
+
   const signedTransaction = TransactionBuilder.fromXDR(
     signedXdr,
     getExpectedNetworkPassphrase(),
   );
-  onSubmitting?.();
   const sendResponse = await server.sendTransaction(signedTransaction);
 
   if (sendResponse.status !== "PENDING") {

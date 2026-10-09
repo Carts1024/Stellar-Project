@@ -4,6 +4,44 @@ This guide is designed for a Builder Journey discussion about **Builder Belt Lev
 
 Talambag is a Soroban-powered community pooling app. It lets real-world groups create shared contribution pools, accept member deposits, allow organizer withdrawals, and keep the frontend synchronized through indexed contract events.
 
+## 0. What Talambag Is
+
+**Talambag** comes from **Tala** and **Ambag**, meaning **Stellar Contribution**. The project is a blockchain-based community contribution platform for groups that need transparent pooled funds.
+
+In a normal community fundraising setup, people often coordinate through chat apps, screenshots, manual lists, and trust-based updates. Talambag replaces that with an on-chain system where:
+
+- Group creation is recorded on-chain.
+- Membership is controlled by the group owner.
+- Members can create contribution pools.
+- Deposits and withdrawals are executed through Soroban contracts.
+- Pool activity is streamed to the frontend in near real time.
+- Participants can verify balances and activity instead of relying only on screenshots.
+
+### Why Talambag Fits Builder Belt Level 4
+
+Talambag is a good Level 4 reference because it is not only a simple contract call demo. It combines:
+
+- A **core pooling contract** for the main app logic.
+- A **rewards token contract** for incentive and token accounting.
+- A **realtime indexer** for event streaming.
+- A **mobile responsive frontend** for real users.
+- A **CI/CD workflow** that checks contracts, frontend, and indexer.
+
+## 0.1 30-Minute Discussion Plan
+
+This guide is intentionally scoped for a **30-minute session**. Use the timeboxing below so the discussion stays focused.
+
+| Time | Topic | What to cover |
+|---|---|---|
+| 0:00-3:00 | Talambag overview | What the app solves and why it fits Builder Belt Level 4. |
+| 3:00-6:00 | Level 4 requirements | Objectives, expected outputs, and how Talambag maps to them. |
+| 6:00-12:00 | Smart contracts | Core contract, rewards contract, and why the second contract exists. |
+| 12:00-17:00 | Inter-contract and pool flow | Walk through deposit, reward recording, and withdrawal diagrams. |
+| 17:00-22:00 | Indexer and realtime frontend | Explain event indexing, SSE, cache invalidation, and live sync. |
+| 22:00-26:00 | GitHub repo walkthrough | Show project structure, key files, README, and CI/CD workflow. |
+| 26:00-29:00 | Demo or final output | Show app flow, screenshots, mobile view, and passing GitHub Actions. |
+| 29:00-30:00 | Tips and pitfalls | Close with practical advice for completing Level 4. |
+
 ## 1. Builder Belt Level 4 Overview
 
 ### Level 4 Focus
@@ -82,6 +120,25 @@ flowchart LR
 ## 4. Core Contract Walkthrough
 
 The core contract is implemented in `contracts/src/lib.rs`.
+
+Talambag uses **two Soroban smart contracts**:
+
+| Contract | File | Short description | Why it is important |
+|---|---|---|---|
+| Talambag Core Contract | `contracts/src/lib.rs` | Manages groups, group members, pools, deposits, withdrawals, pool balances, and core events. | This is the main application contract. It enforces who can create pools, who can deposit, and who can withdraw funds. |
+| Talambag Rewards Contract | `contracts/rewards/src/lib.rs` | Manages reward-token metadata, pending rewards, balances, total supply, claims, transfers, and burns. | This separates incentive logic from pooling logic and demonstrates Level 4 inter-contract architecture. |
+
+### Why Add A Rewards Token Contract?
+
+The additional rewards token was created because Talambag should not only track pooled contributions; it should also be able to recognize and incentivize participation.
+
+Instead of putting reward balances directly inside the core pooling contract, the project uses a separate rewards contract for these reasons:
+
+1. **Separation of responsibilities:** the core contract focuses on group and pool rules, while the rewards contract focuses on token accounting.
+2. **Cleaner inter-contract demonstration:** Level 4 expects inter-contract calls, and the deposit flow naturally shows the core contract invoking the rewards contract.
+3. **Extensibility:** rewards can later evolve into contribution badges, governance weight, loyalty points, or redeemable community benefits without rewriting the pool contract.
+4. **Safer mental model:** pool funds and reward balances are different concepts. Keeping them in separate contracts makes the architecture easier to explain and audit.
+5. **Optional custom token requirement:** Builder Belt Level 4 lists custom token creation as an objective, and the rewards contract provides a meaningful token use case instead of a token added only for compliance.
 
 ### Main State
 
@@ -518,4 +575,3 @@ mindmap
       Meaningful commits
       Demo-ready app
 ```
-
